@@ -23,9 +23,10 @@ export default function UserNavbar() {
   const menuRef = useRef(null);
 
   const navItems = [
-    { name: "Catalog", path: "/catalog", icon: ShoppingBag },
     { name: "Dashboard", path: "/dashboard", icon: LayoutGrid },
+    { name: "Catalog", path: "/catalog", icon: ShoppingBag },
     { name: "My Bookings", path: "/bookings", icon: Calendar },
+    { name: "Profile", path: "/profile", icon: User },
   ];
 
   useEffect(() => {
@@ -34,7 +35,7 @@ export default function UserNavbar() {
       .then((res) => {
         if (isMounted) setUser(res.user || null);
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       isMounted = false;
     };
@@ -60,11 +61,11 @@ export default function UserNavbar() {
 
   const initials = user?.name
     ? user.name
-        .split(" ")
-        .map((p) => p[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()
+      .split(" ")
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase()
     : "";
 
   return (
@@ -96,11 +97,10 @@ export default function UserNavbar() {
                 className="relative py-1 flex items-center gap-2 text-sm font-semibold transition-colors duration-200"
               >
                 <div
-                  className={`flex items-center gap-2 transition-colors ${
-                    isActive
+                  className={`flex items-center gap-2 transition-colors ${isActive
                       ? "text-[#2563EB]"
                       : "text-slate-700 hover:text-[#2563EB]"
-                  }`}
+                    }`}
                 >
                   <Icon size={18} strokeWidth={isActive ? 2.3 : 1.8} />
                   <span>{item.name}</span>
@@ -187,11 +187,10 @@ export default function UserNavbar() {
                         key={item.name}
                         to={item.path}
                         onClick={() => setMenuOpen(false)}
-                        className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${
-                          location.pathname === item.path
+                        className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${location.pathname === item.path
                             ? "text-[#2563EB]"
                             : "text-slate-700 hover:bg-slate-50 hover:text-[#2563EB]"
-                        }`}
+                          }`}
                       >
                         <item.icon size={15} />
                         {item.name}
