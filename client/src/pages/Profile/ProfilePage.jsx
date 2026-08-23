@@ -1,21 +1,24 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Mail,
-  User as UserIcon,
-  ShieldCheck,
+  User,
+  Settings,
+  MonitorSmartphone,
   LogOut,
   Loader2,
-  Phone,
+  Camera,
   MapPin,
-  Wallet,
-  Heart,
-  Plus,
+  Clock,
+  ShieldCheck,
+  Laptop,
+  Smartphone,
+  CheckCircle2,
   X,
-  Save,
 } from "lucide-react";
 import UserNavbar from "../../components/layout/UserNavbar";
+import Footer from "../../components/layout/Footer";
+import defaultProfileImg from "../../assets/images/ProfileImg.jpeg";
 import {
   fetchCurrentUser,
   fetchUserProfile,
@@ -23,22 +26,61 @@ import {
   logoutUser,
 } from "../../lib/authApi";
 
+// ── Static config — change one place, updates the whole UI ──
 const SUGGESTED_INTERESTS = [
-  "beaches",
-  "trekking",
-  "wildlife",
-  "heritage",
-  "adventure",
-  "food",
-  "nightlife",
-  "backpacking",
-  "luxury",
-  "family",
+  "Beaches", "Trekking", "Wildlife", "Heritage", "Adventure",
+  "Food", "Nightlife", "Backpacking", "Luxury", "Family",
 ];
 
-const TRAVEL_STYLES = ["budget", "mid-range", "luxury", "backpacker", "family", "solo"];
+const TRAVEL_STYLE_OPTIONS = [
+  { value: "", label: "Select style" },
+  { value: "Budget", label: "Budget" },
+  { value: "Mid-range", label: "Mid-range" },
+  { value: "Luxury", label: "Luxury" },
+  { value: "Backpacker", label: "Backpacker" },
+  { value: "Family", label: "Family" },
+  { value: "Solo", label: "Solo" },
+];
 
-const CURRENCIES = ["INR", "USD", "EUR", "GBP"];
+const CURRENCY_OPTIONS = [
+  { value: "INR", label: "Indian Rupee (₹)" },
+  { value: "USD", label: "US Dollar ($)" },
+  { value: "EUR", label: "Euro (€)" },
+  { value: "GBP", label: "British Pound (£)" },
+];
+
+const TIMEZONE_OPTIONS = [
+  { value: "Asia/Kolkata", label: "IST — Asia/Kolkata (+05:30)" },
+  { value: "UTC", label: "UTC — Universal (+00:00)" },
+  { value: "America/New_York", label: "EST — America/New_York (-05:00)" },
+  { value: "America/Los_Angeles", label: "PST — America/Los_Angeles (-08:00)" },
+  { value: "Europe/London", label: "GMT — Europe/London (+00:00)" },
+  { value: "Asia/Dubai", label: "GST — Asia/Dubai (+04:00)" },
+  { value: "Asia/Singapore", label: "SGT — Asia/Singapore (+08:00)" },
+];
+
+const GENDER_OPTIONS = [
+  { value: "", label: "Prefer not to say" },
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "other", label: "Other" },
+];
+
+// ── Form field definitions — add/remove a field here, not in the JSX ──
+// type: 'text' | 'tel' | 'email' | 'date' | 'select' | 'readonly'
+// key: matches the form state key, or '__user__' for read-only user fields
+const PROFILE_FIELDS = [
+  { key: "__firstName", label: "First Name", type: "readonly", get: (u) => u?.name?.split(" ")[0] || "" },
+  { key: "__lastName", label: "Last Name", type: "readonly", get: (u) => u?.name?.split(" ").slice(1).join(" ") || "" },
+  { key: "username", label: "Username", type: "text" },
+  { key: "phoneNumber", label: "Phone Number", type: "tel" },
+  { key: "__email", label: "Email Address", type: "readonly", get: (u) => u?.email || "" },
+  { key: "dateOfBirth", label: "Date of Birth", type: "date" },
+  { key: "gender", label: "Gender", type: "select", options: () => GENDER_OPTIONS },
+  { key: "homeCity", label: "Home City", type: "text" },
+  { key: "homeCountry", label: "Home Country", type: "text" },
+  { key: "budgetCurrency", label: "Default Currency", type: "select", options: () => CURRENCY_OPTIONS },
+];
 
 const emptyForm = {
   username: "",
@@ -57,8 +99,18 @@ const emptyForm = {
   marketingOptIn: false,
 };
 
-function inputClass() {
-  return "w-full px-4 py-2.5 rounded-xl text-sm text-[#133C55] placeholder-[#94a3b8] outline-none transition-all bg-white border border-slate-200 focus:border-[#14b8a6]";
+const inputCls =
+  "w-full px-3 py-2.5 rounded-md text-sm text-slate-800 placeholder-slate-400 bg-white border border-slate-300 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+
+const labelCls = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
+
+function Field({ label, children }) {
+  return (
+    <div className="space-y-1">
+      <label className={labelCls}>{label}</label>
+      {children}
+    </div>
+  );
 }
 
 export default function ProfilePage() {
@@ -67,93 +119,93 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
+  const [activeTab, setActiveTab] = useState("profile");
 
   const [form, setForm] = useState(emptyForm);
   const [interestInput, setInterestInput] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState("");
-  const [saveError, setSaveError] = useState("");
+  const [saveMsg, setSaveMsg] = useState("");
+  const [saveErr, setSaveErr] = useState("");
+  const [profilePic, setProfilePic] = useState(defaultProfileImg);
+
+  // Preferences tab – loaded from localStorage
+  const [prefs, setPrefs] = useState({ currency: "INR", timeZone: "Asia/Kolkata" });
+  const [toggles, setToggles] = useState({ recommendations: true, dataCollection: false });
+  const [prefSaving, setPrefSaving] = useState(false);
+  const [prefMsg, setPrefMsg] = useState("");
+
+  const devices = [
+    { id: 1, type: "laptop", name: "Windows PC · Chrome", location: "Mumbai, India", time: "Active now", isCurrent: true },
+    { id: 2, type: "smartphone", name: "iPhone 14 · Safari", location: "Pune, India", time: "Last active 2 hours ago", isCurrent: false },
+  ];
+
+  const TABS = [
+    { id: "profile", label: "Account Settings", icon: User },
+    { id: "prefs", label: "Preferences", icon: Settings },
+    { id: "devices", label: "Login Activity", icon: MonitorSmartphone },
+  ];
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadProfile() {
+    let alive = true;
+    (async () => {
       try {
-        const [meResponse, profileResponse] = await Promise.all([
-          fetchCurrentUser(),
-          fetchUserProfile(),
-        ]);
+        const [meRes, profileRes] = await Promise.all([fetchCurrentUser(), fetchUserProfile()]);
+        if (!alive) return;
+        setUser(meRes.user);
 
-        if (!isMounted) return;
+        // Load saved prefs from localStorage
+        const stored = localStorage.getItem(`tripzy_prefs_${meRes.user?.id}`);
+        if (stored) {
+          try { const p = JSON.parse(stored); setPrefs(p.prefs ?? prefs); setToggles(p.toggles ?? toggles); }
+          catch { /* ignore */ }
+        }
 
-        setUser(meResponse.user);
-
-        const profile = profileResponse.profile;
-        if (profile) {
+        const p = profileRes.profile;
+        if (p) {
           setForm({
-            username: profile.username || "",
-            phoneNumber: profile.phoneNumber || "",
-            dateOfBirth: profile.dateOfBirth || "",
-            gender: profile.gender || "",
-            bio: profile.bio || "",
-            homeCity: profile.homeCity || "",
-            homeCountry: profile.homeCountry || "",
-            travelInterests: profile.travelInterests || [],
-            preferredTravelStyle: profile.preferredTravelStyle || "",
-            budgetMin: profile.budgetMin ?? "",
-            budgetMax: profile.budgetMax ?? "",
-            budgetCurrency: profile.budgetCurrency || "INR",
-            preferredLanguage: profile.preferredLanguage || "",
-            marketingOptIn: Boolean(profile.marketingOptIn),
+            username: p.username || "",
+            phoneNumber: p.phoneNumber || "",
+            dateOfBirth: p.dateOfBirth || "",
+            gender: p.gender || "",
+            bio: p.bio || "",
+            homeCity: p.homeCity || "",
+            homeCountry: p.homeCountry || "",
+            travelInterests: p.travelInterests || [],
+            preferredTravelStyle: p.preferredTravelStyle || "",
+            budgetMin: p.budgetMin ?? "",
+            budgetMax: p.budgetMax ?? "",
+            budgetCurrency: p.budgetCurrency || "INR",
+            preferredLanguage: p.preferredLanguage || "",
+            marketingOptIn: Boolean(p.marketingOptIn),
           });
         }
-      } catch (fetchError) {
-        if (isMounted) {
-          setError(fetchError.message || "Unable to load profile.");
-        }
+      } catch (e) {
+        if (alive) setError(e.message || "Unable to load profile.");
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (alive) setLoading(false);
       }
-    }
-
-    loadProfile();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    })();
+    return () => { alive = false; };
+  }, []); // eslint-disable-line
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    try {
-      await logoutUser();
-    } finally {
-      navigate("/login", { replace: true });
-    }
+    try { await logoutUser(); } finally { navigate("/login", { replace: true }); }
   };
 
-  const addInterest = (value) => {
-    const cleaned = value.trim().toLowerCase();
-    if (!cleaned || form.travelInterests.includes(cleaned)) return;
-    setForm({ ...form, travelInterests: [...form.travelInterests, cleaned] });
+  const addInterest = (val) => {
+    const v = val.trim().toLowerCase();
+    if (!v || form.travelInterests.includes(v)) return;
+    setForm({ ...form, travelInterests: [...form.travelInterests, v] });
     setInterestInput("");
   };
 
-  const removeInterest = (value) => {
-    setForm({
-      ...form,
-      travelInterests: form.travelInterests.filter((i) => i !== value),
-    });
-  };
+  const removeInterest = (val) =>
+    setForm({ ...form, travelInterests: form.travelInterests.filter((i) => i !== val) });
 
-  const handleSaveProfile = async (e) => {
+  const saveProfile = async (e) => {
     e.preventDefault();
-    setSaving(true);
-    setSaveMessage("");
-    setSaveError("");
-
+    setSaving(true); setSaveMsg(""); setSaveErr("");
     const payload = {
       username: form.username || undefined,
       phoneNumber: form.phoneNumber || undefined,
@@ -170,376 +222,385 @@ export default function ProfilePage() {
       preferredLanguage: form.preferredLanguage || undefined,
       marketingOptIn: form.marketingOptIn,
     };
-
     try {
       await updateUserProfile(payload);
-      setSaveMessage("Profile saved successfully.");
-    } catch (updateError) {
-      setSaveError(updateError.message || "Unable to save profile.");
+      setSaveMsg("Changes saved successfully.");
+    } catch (err) {
+      setSaveErr(err.message || "Unable to save changes.");
     } finally {
       setSaving(false);
+      setTimeout(() => setSaveMsg(""), 5000);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#F7F9FC] text-[#133C55]">
-      <UserNavbar />
-      <main className="pt-28 px-6 pb-16 max-w-7xl mx-auto">
-        <div className="flex items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-extrabold mb-2">User Profile</h1>
-            <p className="text-[#386FA4]">
-              View your account details and complete your travel profile.
-            </p>
-          </div>
+  const savePrefs = (e) => {
+    e.preventDefault();
+    setPrefSaving(true);
+    try {
+      localStorage.setItem(`tripzy_prefs_${user?.id}`, JSON.stringify({ prefs, toggles }));
+      setPrefMsg("Preferences saved.");
+    } finally {
+      setPrefSaving(false);
+      setTimeout(() => setPrefMsg(""), 4000);
+    }
+  };
 
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleSignOut}
-            disabled={signingOut}
-            className="inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold text-white shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
-            style={{ background: "linear-gradient(135deg, #0f2442 0%, #1f3ccb 100%)" }}
-          >
-            {signingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
-            {signingOut ? "Signing out..." : "Sign out"}
-          </motion.button>
-        </div>
+  const handleImageUpload = (e) => {
+    const f = e.target.files[0];
+    if (f) setProfilePic(URL.createObjectURL(f));
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F0F2F5] flex flex-col font-sans">
+      <UserNavbar />
+
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-20">
 
         {loading ? (
-          <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-8">
-            <p className="text-sm text-slate-500">Loading profile information...</p>
+          <div className="flex items-center justify-center py-28 bg-white rounded-xl shadow border border-slate-200 mt-6">
+            <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
           </div>
         ) : error ? (
-          <div className="rounded-3xl bg-red-50 border border-red-200 p-8 text-red-700">
-            <p className="font-semibold">{error}</p>
-          </div>
+          <div className="p-6 bg-red-50 text-red-600 rounded-xl border border-red-200 text-sm mt-6">{error}</div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
-            {/* ── Left column: account summary + session ── */}
-            <div className="flex flex-col gap-6">
-              <section className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-8">
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0f2442] text-white shadow-lg">
-                    <UserIcon size={28} />
+          <div className="flex flex-col lg:flex-row gap-6 items-start">
+
+            {/* ── Left sidebar ── */}
+            <aside className="w-full lg:w-64 flex-shrink-0 space-y-4">
+
+              {/* Profile card */}
+              <div className="bg-white rounded-xl shadow border border-slate-200 pt-6 pb-5 px-5 flex flex-col items-center text-center">
+                <div className="relative group mb-3">
+                  <div className="w-24 h-24 rounded-full bg-slate-100 border-4 border-white shadow-md overflow-hidden flex items-center justify-center text-slate-400">
+                    {profilePic
+                      ? <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+                      : <User size={36} />}
                   </div>
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.25em] text-slate-400 font-semibold">
-                      Signed in as
-                    </p>
-                    <h2 className="text-2xl font-black text-[#0f2442]">{user?.name}</h2>
-                  </div>
+                  <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                    <Camera size={20} className="text-white" />
+                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                  </label>
+                </div>
+                <h2 className="text-base font-bold text-slate-900 leading-tight">{user?.name}</h2>
+                <p className="text-xs text-slate-500 capitalize mt-0.5">{user?.email}</p>
+
+                <div className="w-full mt-4 space-y-1 text-sm">
+                  {[
+                    { label: "Travel style", value: form.preferredTravelStyle || "—" },
+                    { label: "Home city", value: form.homeCity || "—" },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex justify-between items-center py-1.5 border-t border-slate-100">
+                      <span className="text-slate-400 text-xs">{label}</span>
+                      <span className="text-slate-700 font-semibold text-xs capitalize truncate max-w-[100px]">{value}</span>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="grid gap-4">
-                  <div className="rounded-2xl bg-[#F7F9FC] p-5 border border-slate-100">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-2">
-                      <Mail size={16} />
-                      Email
-                    </div>
-                    <p className="text-base font-semibold text-[#133C55] break-all">
-                      {user?.email}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-[#F7F9FC] p-5 border border-slate-100">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-2">
-                      <ShieldCheck size={16} />
-                      Role
-                    </div>
-                    <p className="text-base font-semibold text-[#133C55] capitalize">
-                      {user?.role}
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <aside className="rounded-3xl bg-[#0f2442] text-white shadow-[0_18px_50px_rgba(15,36,66,0.14)] p-8">
-                <p className="text-sm uppercase tracking-[0.25em] text-white/60 font-semibold mb-2">
-                  Session
-                </p>
-                <h3 className="text-2xl font-black mb-3">Dedicated sign out</h3>
-                <p className="text-sm leading-relaxed text-white/80 mb-6">
-                  This clears the httpOnly auth cookies on the server and sends you back to the
-                  login screen.
-                </p>
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <button
                   onClick={handleSignOut}
                   disabled={signingOut}
-                  className="w-full rounded-2xl bg-white px-5 py-3 text-sm font-bold text-[#0f2442] disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="mt-4 w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50"
                 >
-                  {signingOut ? "Signing out..." : "Sign out now"}
-                </motion.button>
-              </aside>
-            </div>
+                  {signingOut ? <Loader2 size={15} className="animate-spin" /> : <LogOut size={15} />}
+                  {signingOut ? "Signing out…" : "Log out"}
+                </button>
+              </div>
+            </aside>
 
-            {/* ── Right column: editable travel profile ── */}
-            <section className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-8">
-              <div className="mb-6">
-                <h2 className="text-2xl font-black text-[#0f2442] mb-1">Travel profile</h2>
-                <p className="text-sm text-slate-500">
-                  Every field here is optional — fill in what you'd like, leave the rest blank.
-                </p>
+            {/* ── Main content ── */}
+            <div className="flex-1 min-w-0 space-y-0">
+
+              {/* Horizontal tabs */}
+              <div className="bg-white rounded-t-xl border border-slate-200 border-b-0 shadow-sm px-6 pt-4 flex gap-1 overflow-x-auto">
+                {TABS.map(({ id, label, icon: Icon }) => {
+                  const active = activeTab === id;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setActiveTab(id)}
+                      className={`relative flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap transition-colors rounded-t-lg ${active
+                        ? "text-blue-700 bg-blue-50/60"
+                        : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                        }`}
+                    >
+                      <Icon size={15} />
+                      {label}
+                      {active && (
+                        <motion.div
+                          layoutId="tabUnderline"
+                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
-              {saveMessage && (
-                <div className="mb-4 px-4 py-2.5 rounded-xl text-sm text-emerald-700 bg-emerald-50 border border-emerald-200">
-                  {saveMessage}
-                </div>
-              )}
-              {saveError && (
-                <div className="mb-4 px-4 py-2.5 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">
-                  {saveError}
-                </div>
-              )}
+              {/* Tab content */}
+              <AnimatePresence mode="wait">
 
-              <form onSubmit={handleSaveProfile} className="flex flex-col gap-6">
-                {/* Username / Phone */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-[#133C55]/75 flex items-center gap-1.5">
-                      <UserIcon size={13} /> Username
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. wanderlust_raj"
-                      value={form.username}
-                      onChange={(e) => setForm({ ...form, username: e.target.value })}
-                      className={inputClass()}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-[#133C55]/75 flex items-center gap-1.5">
-                      <Phone size={13} /> Phone number
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="+91 98765 43210"
-                      value={form.phoneNumber}
-                      onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
-                      className={inputClass()}
-                    />
-                  </div>
-                </div>
-
-                {/* DOB / Gender */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-[#133C55]/75">
-                      Date of birth
-                    </label>
-                    <input
-                      type="date"
-                      value={form.dateOfBirth}
-                      onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })}
-                      className={inputClass()}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-[#133C55]/75">Gender</label>
-                    <select
-                      value={form.gender}
-                      onChange={(e) => setForm({ ...form, gender: e.target.value })}
-                      className={inputClass()}
-                    >
-                      <option value="">Prefer not to say</option>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                      <option value="prefer_not_to_say">Prefer not to say</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Home city / country */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-[#133C55]/75 flex items-center gap-1.5">
-                      <MapPin size={13} /> Home city
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Pune"
-                      value={form.homeCity}
-                      onChange={(e) => setForm({ ...form, homeCity: e.target.value })}
-                      className={inputClass()}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-[#133C55]/75">Home country</label>
-                    <input
-                      type="text"
-                      placeholder="India"
-                      value={form.homeCountry}
-                      onChange={(e) => setForm({ ...form, homeCountry: e.target.value })}
-                      className={inputClass()}
-                    />
-                  </div>
-                </div>
-
-                {/* Travel interests */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-[#133C55]/75 flex items-center gap-1.5">
-                    <Heart size={13} /> Travel interests
-                  </label>
-
-                  <div className="flex flex-wrap gap-2 mb-1">
-                    {form.travelInterests.map((interest) => (
-                      <span
-                        key={interest}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-[#14b8a6]/10 text-[#0f766e] border border-[#14b8a6]/30"
-                      >
-                        {interest}
-                        <button
-                          type="button"
-                          onClick={() => removeInterest(interest)}
-                          className="hover:text-red-600"
-                          aria-label={`Remove ${interest}`}
-                        >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Add an interest and press Enter"
-                      value={interestInput}
-                      onChange={(e) => setInterestInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addInterest(interestInput);
-                        }
-                      }}
-                      className={inputClass()}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => addInterest(interestInput)}
-                      className="px-3 rounded-xl bg-[#F7F9FC] border border-slate-200 text-[#0f2442] hover:border-[#14b8a6] transition-colors"
-                      aria-label="Add interest"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {SUGGESTED_INTERESTS.filter((i) => !form.travelInterests.includes(i)).map(
-                      (interest) => (
-                        <button
-                          key={interest}
-                          type="button"
-                          onClick={() => addInterest(interest)}
-                          className="px-3 py-1 rounded-full text-xs font-medium bg-white border border-slate-200 text-slate-500 hover:border-[#14b8a6] hover:text-[#0f766e] transition-colors"
-                        >
-                          + {interest}
-                        </button>
-                      )
-                    )}
-                  </div>
-                </div>
-
-                {/* Travel style */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-[#133C55]/75">
-                    Preferred travel style
-                  </label>
-                  <select
-                    value={form.preferredTravelStyle}
-                    onChange={(e) => setForm({ ...form, preferredTravelStyle: e.target.value })}
-                    className={inputClass()}
+                {/* Account Settings */}
+                {activeTab === "profile" && (
+                  <motion.div
+                    key="profile"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18 }}
+                    className="bg-white border border-slate-200 border-t-0 rounded-b-xl shadow-sm p-6 lg:p-8"
                   >
-                    <option value="">Not specified</option>
-                    {TRAVEL_STYLES.map((style) => (
-                      <option key={style} value={style}>
-                        {style}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <AnimatePresence>
+                      {saveMsg && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-5 overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800 font-medium">
+                            <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" /> {saveMsg}
+                          </div>
+                        </motion.div>
+                      )}
+                      {saveErr && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-5 overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 font-medium">
+                            <X size={16} className="text-red-500 flex-shrink-0" /> {saveErr}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
-                {/* Budget */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-[#133C55]/75 flex items-center gap-1.5">
-                    <Wallet size={13} /> Travel budget
-                  </label>
-                  <div className="grid gap-3 grid-cols-3">
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="Min"
-                      value={form.budgetMin}
-                      onChange={(e) => setForm({ ...form, budgetMin: e.target.value })}
-                      className={inputClass()}
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="Max"
-                      value={form.budgetMax}
-                      onChange={(e) => setForm({ ...form, budgetMax: e.target.value })}
-                      className={inputClass()}
-                    />
-                    <select
-                      value={form.budgetCurrency}
-                      onChange={(e) => setForm({ ...form, budgetCurrency: e.target.value })}
-                      className={inputClass()}
-                    >
-                      {CURRENCIES.map((currency) => (
-                        <option key={currency} value={currency}>
-                          {currency}
-                        </option>
+                    <form onSubmit={saveProfile} className="space-y-7">
+
+                      {/* Basic info — rendered from PROFILE_FIELDS config */}
+                      <section className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        {PROFILE_FIELDS.map((field) => {
+                          if (field.type === "readonly") {
+                            return (
+                              <Field key={field.key} label={field.label}>
+                                <input
+                                  type="text"
+                                  readOnly
+                                  value={field.get(user)}
+                                  className={`${inputCls} bg-slate-50 cursor-not-allowed text-slate-400`}
+                                />
+                              </Field>
+                            );
+                          }
+                          if (field.type === "select") {
+                            return (
+                              <Field key={field.key} label={field.label}>
+                                <select
+                                  className={inputCls}
+                                  value={form[field.key]}
+                                  onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
+                                >
+                                  {field.options().map((o) => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                              </Field>
+                            );
+                          }
+                          // text / tel / date / email
+                          return (
+                            <Field key={field.key} label={field.label}>
+                              <input
+                                type={field.type}
+                                className={inputCls}
+                                value={form[field.key]}
+                                onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
+                              />
+                            </Field>
+                          );
+                        })}
+                      </section>
+
+                      <hr className="border-slate-100" />
+
+                      {/* Travel preferences section */}
+                      <section className="space-y-5">
+                        <h3 className="text-sm font-bold text-slate-800">Travel Preferences</h3>
+
+                        <Field label="Travel Style">
+                          <select className={inputCls} value={form.preferredTravelStyle} onChange={(e) => setForm({ ...form, preferredTravelStyle: e.target.value })}>
+                            {TRAVEL_STYLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </Field>
+
+                        <div>
+                          <label className={labelCls}>Interests</label>
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {form.travelInterests.map((interest) => (
+                              <span key={interest} className="inline-flex items-center gap-1 pl-3 pr-2 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                                {interest.charAt(0).toUpperCase() + interest.slice(1)}
+                                <button type="button" onClick={() => removeInterest(interest)} className="text-blue-400 hover:text-red-500 ml-0.5">
+                                  <X size={11} strokeWidth={3} />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Type and press Enter to add..."
+                            value={interestInput}
+                            onChange={(e) => setInterestInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addInterest(interestInput); } }}
+                            className={`${inputCls} max-w-sm`}
+                          />
+                          <div className="flex flex-wrap gap-2 mt-2.5">
+                            {SUGGESTED_INTERESTS
+                              .filter((i) => !form.travelInterests.includes(i.toLowerCase()))
+                              .map((i) => (
+                                <button key={i} type="button" onClick={() => addInterest(i)}
+                                  className="px-2.5 py-1 rounded-full text-xs font-medium border border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors">
+                                  + {i}
+                                </button>
+                              ))
+                            }
+                          </div>
+                        </div>
+
+                        <Field label="Bio">
+                          <textarea rows={3} placeholder="A short description about yourself…" value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} className={`${inputCls} resize-none`} />
+                        </Field>
+                      </section>
+
+                      <div className="flex justify-start pt-1">
+                        <button type="submit" disabled={saving} className="flex items-center gap-2 px-7 py-2.5 rounded-lg text-sm font-bold text-white bg-blue-700 hover:bg-blue-800 transition-colors shadow-sm disabled:opacity-60">
+                          {saving && <Loader2 size={15} className="animate-spin" />}
+                          {saving ? "Saving…" : "Update"}
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                )}
+
+                {/* Preferences */}
+                {activeTab === "prefs" && (
+                  <motion.div
+                    key="prefs"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18 }}
+                    className="bg-white border border-slate-200 border-t-0 rounded-b-xl shadow-sm p-6 lg:p-8"
+                  >
+                    <AnimatePresence>
+                      {prefMsg && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-5 overflow-hidden">
+                          <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800 font-medium">
+                            <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" /> {prefMsg}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <form onSubmit={savePrefs} className="space-y-7">
+
+                      <section className="space-y-5">
+                        <h3 className="text-sm font-bold text-slate-800">Regional Defaults</h3>
+                        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                          <Field label="Display Currency">
+                            <select className={inputCls} value={prefs.currency} onChange={(e) => setPrefs({ ...prefs, currency: e.target.value })}>
+                              {CURRENCY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </Field>
+                          <Field label="Time Zone">
+                            <select className={inputCls} value={prefs.timeZone} onChange={(e) => setPrefs({ ...prefs, timeZone: e.target.value })}>
+                              {TIMEZONE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </Field>
+                        </div>
+                      </section>
+
+                      <hr className="border-slate-100" />
+
+                      <section className="space-y-4">
+                        <h3 className="text-sm font-bold text-slate-800">Privacy & Intelligence</h3>
+
+                        {[
+                          { key: "recommendations", title: "Personalised Recommendations", desc: "Receive tailored destination and activity suggestions based on your profile." },
+                          { key: "dataCollection", title: "Diagnostic Data", desc: "Help us improve by sharing anonymous crash reports and usage statistics." },
+                        ].map(({ key, title, desc }) => (
+                          <div key={key} className="flex items-start justify-between gap-6 py-3 border-b border-slate-100 last:border-0">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{title}</p>
+                              <p className="text-xs text-slate-500 mt-0.5 max-w-md">{desc}</p>
+                            </div>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={toggles[key]}
+                              onClick={() => setToggles({ ...toggles, [key]: !toggles[key] })}
+                              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${toggles[key] ? "bg-blue-700" : "bg-slate-200"}`}
+                            >
+                              <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${toggles[key] ? "translate-x-5" : "translate-x-0"}`} />
+                            </button>
+                          </div>
+                        ))}
+                      </section>
+
+                      <div className="flex justify-start pt-1">
+                        <button type="submit" disabled={prefSaving} className="flex items-center gap-2 px-7 py-2.5 rounded-lg text-sm font-bold text-white bg-blue-700 hover:bg-blue-800 transition-colors shadow-sm disabled:opacity-60">
+                          {prefSaving && <Loader2 size={15} className="animate-spin" />}
+                          {prefSaving ? "Saving…" : "Update"}
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                )}
+
+                {/* Login Activity */}
+                {activeTab === "devices" && (
+                  <motion.div
+                    key="devices"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18 }}
+                    className="bg-white border border-slate-200 border-t-0 rounded-b-xl shadow-sm p-6 lg:p-8"
+                  >
+                    <div className="space-y-3">
+                      {devices.map((d) => (
+                        <div key={d.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors bg-white">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 flex-shrink-0">
+                              {d.type === "laptop" ? <Laptop size={18} /> : <Smartphone size={18} />}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                                {d.name}
+                                {d.isCurrent && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">This device</span>}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1">
+                                <span className="flex items-center gap-1"><MapPin size={11} /> {d.location}</span>
+                                <span className="flex items-center gap-1"><Clock size={11} /> {d.time}</span>
+                              </div>
+                            </div>
+                          </div>
+                          {!d.isCurrent && (
+                            <button className="text-xs font-semibold text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300 px-4 py-2 rounded-lg transition-colors whitespace-nowrap self-start sm:self-auto">
+                              Log Out
+                            </button>
+                          )}
+                        </div>
                       ))}
-                    </select>
-                  </div>
-                </div>
+                    </div>
 
-                {/* Bio */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-[#133C55]/75">Bio</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Tell us a little about your travel style..."
-                    value={form.bio}
-                    onChange={(e) => setForm({ ...form, bio: e.target.value })}
-                    className={inputClass()}
-                  />
-                </div>
+                    <div className="mt-6 flex gap-3 items-start p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <ShieldCheck size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">Account Security</p>
+                        <p className="text-xs text-slate-500 mt-0.5">If you spot an unfamiliar device, log it out immediately. They'll need to re-authenticate next time.</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
 
-                {/* Marketing opt-in */}
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={form.marketingOptIn}
-                    onChange={(e) => setForm({ ...form, marketingOptIn: e.target.checked })}
-                    className="rounded border-slate-300"
-                  />
-                  Send me travel deals and recommendations by email
-                </label>
-
-                <motion.button
-                  type="submit"
-                  disabled={saving}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="inline-flex items-center justify-center gap-2 w-full sm:w-auto self-start px-6 py-3 rounded-xl text-sm font-bold text-white disabled:opacity-70 disabled:cursor-not-allowed"
-                  style={{ background: "linear-gradient(135deg, #0f2442 0%, #1f3ccb 100%)" }}
-                >
-                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  {saving ? "Saving..." : "Save profile"}
-                </motion.button>
-              </form>
-            </section>
+              </AnimatePresence>
+            </div>
           </div>
         )}
       </main>
+
+      <Footer />
     </div>
   );
 }
