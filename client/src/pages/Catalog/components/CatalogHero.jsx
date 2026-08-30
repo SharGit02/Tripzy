@@ -1,39 +1,65 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { TriangleAlert } from "lucide-react";
 import airplaneImg from "../../../assets/images/Airplane.png";
 import BoardingPassSearch from "./BoardingPassSearch";
-import { createSearchHistory } from "../../../lib/authApi";
+import { fetchFlightFarePrediction } from "../../../lib/authApi";
+
+// Default window scanned for "cheapest days to fly" — a fixed default rather
+// than a form field, since BoardingPassSearch's "Duration" picks a travel
+// *date* (and an optional return date), not a fare-scan window size.
+const DEFAULT_WINDOW_DAYS = 30;
+
+// Local YYYY-MM-DD, not toISOString() — that shifts by the viewer's UTC
+// offset and can land on the wrong calendar day.
+function toIsoDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export default function CatalogHero() {
-  const [searchNotice, setSearchNotice] = useState("");
+  const navigate = useNavigate();
+  const [searchError, setSearchError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSearch = async (search) => {
-    const from = search.fromCity?.trim();
-    const to = search.whereTo?.trim();
-    const query = from && to ? `${from} to ${to}` : to || from || "New search";
+    const origin = search.fromCity?.trim();
+    const destination = search.whereTo?.trim();
 
+    if (!origin || !destination) {
+      setSearchError("Enter both a departure city and a destination.");
+      return;
+    }
+    if (!search.startDate) {
+      setSearchError("Pick a travel date.");
+      return;
+    }
+    if (origin.toLowerCase() === destination.toLowerCase()) {
+      setSearchError("Departure and destination must be different cities.");
+      return;
+    }
+
+    setSearchError("");
+    setSubmitting(true);
     try {
-      await createSearchHistory({
-        query,
-        filters: {
-          fromCity: search.fromCity,
-          whereTo: search.whereTo,
-          startDate: search.startDate,
-          endDate: search.endDate,
-          budget: search.budget,
-          ...search.filters,
-        },
+      const { prediction } = await fetchFlightFarePrediction({
+        origin,
+        destination,
+        startDate: toIsoDate(search.startDate),
+        windowDays: DEFAULT_WINDOW_DAYS,
       });
-      setSearchNotice("Saved — you'll see this on your dashboard.");
-    } catch {
-      // Best-effort: an anonymous visitor or a transient failure shouldn't
-      // block browsing, so we just skip the confirmation silently.
-      setSearchNotice("");
+      navigate(`/trip/${prediction.id}`);
+    } catch (err) {
+      setSearchError(err.message || "Unable to search fares for this route.");
+      setSubmitting(false);
     }
   };
 
   return (
-    <section className="relative overflow-visible bg-gradient-to-b from-[#EBF3FF] via-[#F4F8FF] to-[#F7F9FC] pt-32 md:pt-36 pb-10 px-6 rounded-b-[40px] shadow-sm">
+    <section className="relative overflow-x-clip bg-gradient-to-b from-[#EBF3FF] via-[#F4F8FF] to-[#F7F9FC] pt-32 md:pt-36 pb-10 px-6 rounded-b-[40px] shadow-sm">
       {/* ── Seamless Dotted Flight Path connecting Left Heading to Right Airplane ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         <svg
@@ -104,7 +130,7 @@ export default function CatalogHero() {
               transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
               src={airplaneImg}
               alt="Commercial Flight Booking Services Airplane"
-              className="w-auto max-h-[260px] sm:max-h-[320px] md:max-h-[380px] lg:max-h-[420px] object-contain drop-shadow-2xl translate-x-4 md:translate-x-12 lg:translate-x-16"
+              className="w-auto max-h-[260px] sm:max-h-[320px] md:max-h-[380px] lg:max-h-[420px] object-contain drop-shadow-2xl translate-x-1 md:translate-x-3 lg:translate-x-4 xl:translate-x-12 2xl:translate-x-16"
             />
           </motion.div>
         </div>
@@ -131,10 +157,16 @@ export default function CatalogHero() {
           transition={{ duration: 0.6, delay: 0.3 }}
           className="w-full"
         >
-          <BoardingPassSearch onSearch={handleSearch} />
-          {searchNotice && (
-            <p className="text-center text-sm font-medium text-[#0f766e] mt-3">
-              {searchNotice}
+          <BoardingPassSearch onSearch={handleSearch} disabled={submitting} />
+          {submitting && (
+            <p className="text-center text-sm font-medium text-[#1C3F94] mt-3">
+              Searching fares for this route...
+            </p>
+          )}
+          {searchError && (
+            <p className="flex items-center justify-center gap-1.5 text-center text-sm font-medium text-red-600 mt-3">
+              <TriangleAlert size={14} />
+              {searchError}
             </p>
           )}
         </motion.div>

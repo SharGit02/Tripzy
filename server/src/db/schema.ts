@@ -119,6 +119,30 @@ export const searchHistory = pgTable("search_history", {
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── flight_fare_predictions ─────────────────────────────────────────────
+// One row per "cheapest days to fly" search, FK'd to the user so their past
+// predictions can be listed. `results` holds the full day-by-day quote list
+// returned by the ML service; best* columns are denormalized out of it for
+// cheap list-view rendering without unpacking the jsonb blob.
+export const flightFarePredictions = pgTable("flight_fare_predictions", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id, { onDelete: "cascade" }),
+    origin: varchar("origin", { length: 60 }).notNull(),
+    destination: varchar("destination", { length: 60 }).notNull(),
+    searchStartDate: date("search_start_date").notNull(),
+    windowDays: integer("window_days").notNull().default(30),
+    // Nullable: a window can have zero matching flights across every day scanned.
+    bestDate: date("best_date"),
+    bestAirline: varchar("best_airline", { length: 120 }),
+    bestFlightNumber: integer("best_flight_number"),
+    bestPredictedFare: numeric("best_predicted_fare", { precision: 12, scale: 2 }),
+    // { quotes: [...], daysWithNoFlights: [...] } from the ML service response.
+    results: jsonb("results"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ── relations (for drizzle relational query API) ───────────────────────
 export const usersRelations = relations(users, ({ one, many }) => ({
     profile: one(userProfiles, {
@@ -127,6 +151,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     }),
     bookings: many(bookings),
     searchHistory: many(searchHistory),
+    flightFarePredictions: many(flightFarePredictions),
 }));
 
 export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
@@ -143,6 +168,20 @@ export const bookingsRelations = relations(bookings, ({ one }) => ({
     }),
 }));
 
+export const searchHistoryRelations = relations(searchHistory, ({ one }) => ({
+    user: one(users, {
+        fields: [searchHistory.userId],
+        references: [users.id],
+    }),
+}));
+
+export const flightFarePredictionsRelations = relations(flightFarePredictions, ({ one }) => ({
+    user: one(users, {
+        fields: [flightFarePredictions.userId],
+        references: [users.id],
+    }),
+}));
+
 // ── row types ────────────────────────────────────────────────────────────
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
@@ -152,10 +191,5 @@ export type BookingRow = typeof bookings.$inferSelect;
 export type NewBookingRow = typeof bookings.$inferInsert;
 export type SearchHistoryRow = typeof searchHistory.$inferSelect;
 export type NewSearchHistoryRow = typeof searchHistory.$inferInsert;
-
-export const searchHistoryRelations = relations(searchHistory, ({ one }) => ({
-    user: one(users, {
-        fields: [searchHistory.userId],
-        references: [users.id],
-    }),
-}));
+export type FlightFarePredictionRow = typeof flightFarePredictions.$inferSelect;
+export type NewFlightFarePredictionRow = typeof flightFarePredictions.$inferInsert;

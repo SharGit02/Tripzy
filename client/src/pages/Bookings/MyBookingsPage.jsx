@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Calendar, MapPin, Users, Loader2, X, Ticket } from "lucide-react";
 import UserNavbar from "../../components/layout/UserNavbar";
-import { fetchBookings, deleteBooking } from "../../lib/authApi";
+import { fetchBookings, deleteBooking, fetchFlightFareHistory } from "../../lib/authApi";
+import FareHistoryList from "./components/FareHistoryList";
 
 const STATUS_STYLES = {
   pending: "bg-amber-50 text-amber-700 border-amber-200",
@@ -24,6 +25,9 @@ export default function MyBookingsPage() {
   const [error, setError] = useState("");
   const [cancellingId, setCancellingId] = useState(null);
 
+  const [fareHistory, setFareHistory] = useState([]);
+  const [fareHistoryLoading, setFareHistoryLoading] = useState(true);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -36,6 +40,26 @@ export default function MyBookingsPage() {
       })
       .finally(() => {
         if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchFlightFareHistory()
+      .then((data) => {
+        if (isMounted) setFareHistory(data.history || []);
+      })
+      .catch(() => {
+        // Best-effort: a failed fare-history fetch shouldn't block the
+        // bookings list above it from rendering.
+      })
+      .finally(() => {
+        if (isMounted) setFareHistoryLoading(false);
       });
 
     return () => {
@@ -156,6 +180,12 @@ export default function MyBookingsPage() {
             })}
           </div>
         )}
+
+        <div className="mt-12">
+          <h2 className="text-2xl font-extrabold mb-2">Fare Searches</h2>
+          <p className="text-[#386FA4] mb-6">Past fare predictions from your Catalog searches.</p>
+          <FareHistoryList history={fareHistory} loading={fareHistoryLoading} />
+        </div>
       </main>
     </div>
   );

@@ -5,6 +5,7 @@ import SignupPage from "./pages/Auth/SignupPage";
 import CatalogPage from "./pages/Catalog/CatalogPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import MyBookingsPage from "./pages/Bookings/MyBookingsPage";
+import TripPage from "./pages/Trip/TripPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import "./styles/index.css";
@@ -30,6 +31,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <MyBookingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/trip/:id"
+          element={
+            <ProtectedRoute>
+              <TripPage />
             </ProtectedRoute>
           }
         />

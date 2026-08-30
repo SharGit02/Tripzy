@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
@@ -34,7 +34,6 @@ import {
   Landmark,
   Accessibility,
   ChevronDown,
-  ChevronsUpDown,
 } from "lucide-react";
 
 // ── Persian Blue Color Token ──
@@ -239,7 +238,7 @@ const fmt = (d) =>
       })
     : null;
 
-export default function BoardingPassSearch({ onSearch }) {
+export default function BoardingPassSearch({ onSearch, disabled = false }) {
   // Main inputs
   const [fromCity, setFromCity] = useState("");
   const [whereTo, setWhereTo] = useState("");
@@ -305,6 +304,7 @@ export default function BoardingPassSearch({ onSearch }) {
   };
 
   const handleSubmit = () => {
+    if (disabled) return;
     if (onSearch) {
       onSearch({
         fromCity,
@@ -959,7 +959,8 @@ export default function BoardingPassSearch({ onSearch }) {
         <button
           onClick={handleSubmit}
           type="button"
-          className="relative z-0 w-full lg:w-[210px] flex-shrink-0 flex flex-col items-center justify-center gap-3 px-5 sm:px-6 py-4 lg:py-6 rounded-b-[19px] sm:rounded-b-[23px] lg:rounded-bl-none lg:rounded-r-[23px] overflow-visible hover:brightness-110 active:scale-[0.98] transition-all"
+          disabled={disabled}
+          className="relative z-0 w-full lg:w-[210px] flex-shrink-0 flex flex-col items-center justify-center gap-3 px-5 sm:px-6 py-4 lg:py-6 rounded-b-[19px] sm:rounded-b-[23px] lg:rounded-bl-none lg:rounded-r-[23px] overflow-visible hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-60 disabled:pointer-events-none"
           style={{ backgroundColor: PERSIAN_BLUE }}
         >
           {/* Clipped watermark layer */}

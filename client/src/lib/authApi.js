@@ -96,3 +96,22 @@ export function createSearchHistory(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function fetchWeather(city) {
+  return request(`/weather?city=${encodeURIComponent(city)}`);
+}
+
+export function fetchFlightFarePrediction(payload) {
+  return request("/flight-fare/predict", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchFlightFareHistory() {
+  return request("/flight-fare/history");
+}
+
+export function fetchFlightFarePredictionById(id) {
+  return request(`/flight-fare/${id}`);
+}

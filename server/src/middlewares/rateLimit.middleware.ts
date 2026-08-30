@@ -22,3 +22,29 @@ export const refreshRateLimiter = rateLimit({
     legacyHeaders: false,
     message: { message: "Too many refresh attempts. Please sign in again." },
 });
+
+// The weather endpoint proxies a metered third-party API on a shared key, so
+// the limit protects our OpenWeather quota rather than an auth surface. The
+// budget is generous because responses are cached server-side for 10 minutes —
+// normal browsing rarely reaches upstream at all.
+export const weatherRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many weather lookups. Please try again shortly." },
+});
+
+// The flight-fare endpoint proxies a compute-heavy scan (up to 30 candidate
+// days, each running several Hist_* lookups plus a LightGBM predict per
+// matching flight on that weekday) against an uncached, uncachable-by-design
+// per-route/date query. The budget is far tighter than weather's cached
+// 120/15min: 20/15min comfortably covers a person manually trying a few
+// routes/dates, while making scripted abuse of the ML process expensive fast.
+export const flightFareRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many fare prediction requests. Please try again shortly." },
+});
