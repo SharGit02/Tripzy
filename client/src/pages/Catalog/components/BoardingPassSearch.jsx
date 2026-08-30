@@ -35,6 +35,8 @@ import {
   Accessibility,
   ChevronDown,
 } from "lucide-react";
+import { useLocationContext } from "../../../context/LocationContext";
+import LocationDropdown from "../../../components/layout/LocationDropdown";
 
 // ── Persian Blue Color Token ──
 const PERSIAN_BLUE = "#1C3F94";
@@ -232,15 +234,18 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
 const fmt = (d) =>
   d
     ? d.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
     : null;
 
 export default function BoardingPassSearch({ onSearch, disabled = false }) {
   // Main inputs
-  const [fromCity, setFromCity] = useState("");
+  const { currentCity } = useLocationContext();
+  const [fromOpen, setFromOpen] = useState(false);
+  const fromRef = useRef(null);
+
   const [whereTo, setWhereTo] = useState("");
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
@@ -272,6 +277,8 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
         setShowCal(false);
       if (filterRef.current && !filterRef.current.contains(e.target))
         setShowFilters(false);
+      if (fromRef.current && !fromRef.current.contains(e.target))
+        setFromOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -307,7 +314,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
     if (disabled) return;
     if (onSearch) {
       onSearch({
-        fromCity,
+        fromCity: currentCity,
         whereTo,
         startDate,
         endDate,
@@ -367,27 +374,38 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
           {/* Fields */}
           <div className="flex flex-col sm:flex-row">
             {/* FROM */}
-            <div className="w-full sm:flex-[2] min-w-0 flex items-center gap-3 px-5 py-4 hover:bg-blue-50/40 transition-colors">
-              <MapPin
-                size={18}
-                className="flex-shrink-0"
-                style={{ color: PERSIAN_BLUE }}
-              />
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap">
-                  From
-                </p>
-                <input
-                  type="text"
-                  value={fromCity}
-                  onChange={(e) => setFromCity(e.target.value)}
-                  placeholder="Departure city"
-                  className="block w-full text-sm font-bold text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-500 placeholder:font-medium mt-0.5 truncate"
+            <div ref={fromRef} className="relative w-full sm:flex-[2] min-w-0 border-b sm:border-b-0 sm:border-r border-slate-100">
+              <div
+                className="w-full h-full flex items-start gap-3 px-5 py-4 hover:bg-blue-50/40 transition-colors"
+              >
+                <MapPin
+                  size={18}
+                  className="flex-shrink-0 mt-1"
+                  style={{ color: PERSIAN_BLUE }}
                 />
-                <p className="text-[11px] text-gray-400 mt-0.5 whitespace-nowrap">
-                  Enter departure city
-                </p>
+                <div className="min-w-0 flex-1 overflow-hidden select-none">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap mb-1">
+                    From
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setFromOpen((prev) => !prev)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 transition-all text-xs font-bold text-slate-800"
+                  >
+                    <span className="truncate max-w-[85px] sm:max-w-[110px]">
+                      {currentCity}
+                    </span>
+                    <span className="text-[9px] font-extrabold uppercase text-[#9FADB6] bg-blue-100/80 px-1.5 py-0.5 rounded-md tracking-wider">
+                      CURRENT
+                    </span>
+                    <ChevronDown size={12} className={`text-slate-400 transition-transform duration-200 ${fromOpen ? 'rotate-180 text-[#2563EB]' : ''}`} />
+                  </button>
+                  <p className="text-[11px] text-gray-400 mt-1 whitespace-nowrap">
+                    Change departure
+                  </p>
+                </div>
               </div>
+              <LocationDropdown isOpen={fromOpen} setIsOpen={setFromOpen} align="left" />
             </div>
 
             {/* WHERE TO */}
@@ -653,11 +671,10 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                                   key={item.name}
                                   type="button"
                                   onClick={() => setAccommodation(item.name)}
-                                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border transition-all text-center ${
-                                    isActive
-                                      ? "border-[#2563EB] bg-blue-50/70 text-[#2563EB] font-bold shadow-xs"
-                                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                  }`}
+                                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border transition-all text-center ${isActive
+                                    ? "border-[#2563EB] bg-blue-50/70 text-[#2563EB] font-bold shadow-xs"
+                                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                    }`}
                                 >
                                   <IconComp size={14} className="mb-0.5" />
                                   <span className="text-[9px] leading-tight font-semibold">
@@ -691,11 +708,10 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                                   key={item.name}
                                   type="button"
                                   onClick={() => setTransport(item.name)}
-                                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border transition-all text-center ${
-                                    isActive
-                                      ? "border-[#2563EB] bg-blue-50/70 text-[#2563EB] font-bold shadow-xs"
-                                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                  }`}
+                                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border transition-all text-center ${isActive
+                                    ? "border-[#2563EB] bg-blue-50/70 text-[#2563EB] font-bold shadow-xs"
+                                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                    }`}
                                 >
                                   <IconComp size={14} className="mb-0.5" />
                                   <span className="text-[9px] leading-tight font-semibold">
@@ -726,11 +742,10 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                                   key={item.name}
                                   type="button"
                                   onClick={() => setTripType(item.name)}
-                                  className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl border transition-all ${
-                                    isActive
-                                      ? "border-[#2563EB] bg-blue-50/70 text-[#2563EB] font-bold shadow-xs"
-                                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                  }`}
+                                  className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl border transition-all ${isActive
+                                    ? "border-[#2563EB] bg-blue-50/70 text-[#2563EB] font-bold shadow-xs"
+                                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                    }`}
                                 >
                                   <IconComp size={13} />
                                   <span className="text-[11px] font-semibold">
@@ -772,11 +787,10 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                                   onClick={() =>
                                     handleInterestToggle(item.name)
                                   }
-                                  className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-xl border transition-all ${
-                                    isSelected
-                                      ? "border-[#2563EB] bg-blue-50/70 text-[#2563EB] font-bold shadow-xs"
-                                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                  }`}
+                                  className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-xl border transition-all ${isSelected
+                                    ? "border-[#2563EB] bg-blue-50/70 text-[#2563EB] font-bold shadow-xs"
+                                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                    }`}
                                 >
                                   <IconComp size={13} />
                                   <span className="text-[11px] font-semibold whitespace-nowrap">
@@ -803,11 +817,10 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                           </label>
                           <div
                             onClick={() => setWheelchair(!wheelchair)}
-                            className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all ${
-                              wheelchair
-                                ? "border-[#2563EB] bg-blue-50/40"
-                                : "border-slate-200 hover:bg-slate-50"
-                            }`}
+                            className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all ${wheelchair
+                              ? "border-[#2563EB] bg-blue-50/40"
+                              : "border-slate-200 hover:bg-slate-50"
+                              }`}
                           >
                             <div className="flex items-center gap-1.5">
                               <Accessibility
@@ -821,7 +834,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                             <input
                               type="checkbox"
                               checked={wheelchair}
-                              onChange={() => {}}
+                              onChange={() => { }}
                               className="accent-[#2563EB] w-3.5 h-3.5 rounded cursor-pointer"
                             />
                           </div>

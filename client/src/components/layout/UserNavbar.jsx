@@ -10,23 +10,33 @@ import {
   ChevronDown,
   User,
   LogOut,
+  MapPin,
+  Search,
+  Navigation,
+  Loader2,
+  Check
 } from "lucide-react";
 import logoImg from "../../assets/images/logo.png";
 import { fetchCurrentUser, logoutUser } from "../../lib/authApi";
+import { useLocationContext } from "../../context/LocationContext";
+import LocationDropdown from "./LocationDropdown";
 
 export default function UserNavbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const { currentCity } = useLocationContext();
   const [signingOut, setSigningOut] = useState(false);
+
   const menuRef = useRef(null);
+  const locationRef = useRef(null);
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutGrid },
     { name: "Catalog", path: "/catalog", icon: ShoppingBag },
-    { name: "My Bookings", path: "/bookings", icon: Calendar },
-    { name: "Profile", path: "/profile", icon: User },
+    { name: "My Itineraries", path: "/bookings", icon: Calendar },
   ];
 
   useEffect(() => {
@@ -43,8 +53,12 @@ export default function UserNavbar() {
 
   useEffect(() => {
     const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target))
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
         setMenuOpen(false);
+      }
+      if (locationRef.current && !locationRef.current.contains(e.target)) {
+        setLocationOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -70,7 +84,7 @@ export default function UserNavbar() {
 
   return (
     <header className="fixed top-5 left-0 right-0 z-50 flex justify-center px-4">
-      <nav className="bg-white rounded-[28px] px-4 sm:px-6 py-2.5 shadow-[0_10px_40px_rgba(19,60,85,0.10)] border border-slate-100 flex items-center justify-between gap-4 w-full max-w-6xl transition-all duration-300">
+      <nav className="bg-white rounded-[28px] px-4 sm:px-6 py-2.5 shadow-[0_10px_40px_rgba(19,60,85,0.10)] border border-slate-100 flex items-center justify-between gap-3 sm:gap-4 w-full max-w-6xl transition-all duration-300">
         {/* ── Brand / Logo ── */}
         <Link
           to="/dashboard"
@@ -85,7 +99,7 @@ export default function UserNavbar() {
         </Link>
 
         {/* ── Navigation Links ── */}
-        <div className="hidden md:flex items-center gap-7 lg:gap-10">
+        <div className="hidden md:flex items-center gap-6 lg:gap-8">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -98,8 +112,8 @@ export default function UserNavbar() {
               >
                 <div
                   className={`flex items-center gap-2 transition-colors ${isActive
-                      ? "text-[#2563EB]"
-                      : "text-slate-700 hover:text-[#2563EB]"
+                    ? "text-[#2563EB]"
+                    : "text-slate-700 hover:text-[#2563EB]"
                     }`}
                 >
                   <Icon size={18} strokeWidth={isActive ? 2.3 : 1.8} />
@@ -118,8 +132,34 @@ export default function UserNavbar() {
           })}
         </div>
 
-        {/* ── Right-side account area ── */}
+        {/* ── Right-side items: Location Selector, Premium, Bell, Account ── */}
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+
+          {/* ── Location Selector Toggle & Filter-style Dialog ── */}
+          <div ref={locationRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setLocationOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 transition-all text-xs font-bold text-slate-800"
+            >
+              <MapPin size={14} className="text-[#2563EB]" />
+              <span className="truncate max-w-[85px] sm:max-w-[110px]">
+                {currentCity}
+              </span>
+              <span className="text-[9px] font-extrabold uppercase text-[#9FADB6] bg-blue-100/80 px-1.5 py-0.5 rounded-md tracking-wider">
+                CURRENT
+              </span>
+              <ChevronDown
+                size={12}
+                className={`text-slate-400 transition-transform duration-200 ${locationOpen ? "rotate-180 text-[#2563EB]" : ""
+                  }`}
+              />
+            </button>
+
+            {/* ── Catalog Filter-Style Dialogue Box Popover ── */}
+            <LocationDropdown isOpen={locationOpen} setIsOpen={setLocationOpen} align="right" />
+          </div>
+
           {/* Premium affordance (decorative) */}
           <div className="hidden sm:flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-xs font-bold px-3 py-1.5 rounded-full">
             <Crown size={13} strokeWidth={2.3} />
@@ -160,7 +200,7 @@ export default function UserNavbar() {
                 <motion.div
                   initial={{ opacity: 0, y: 8, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                  exit={{ opacity: 0, y: 8, scale: 1 }}
                   transition={{ duration: 0.15 }}
                   className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.12)] border border-slate-100 py-2 z-50"
                 >
@@ -188,8 +228,8 @@ export default function UserNavbar() {
                         to={item.path}
                         onClick={() => setMenuOpen(false)}
                         className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${location.pathname === item.path
-                            ? "text-[#2563EB]"
-                            : "text-slate-700 hover:bg-slate-50 hover:text-[#2563EB]"
+                          ? "text-[#2563EB]"
+                          : "text-slate-700 hover:bg-slate-50 hover:text-[#2563EB]"
                           }`}
                       >
                         <item.icon size={15} />
