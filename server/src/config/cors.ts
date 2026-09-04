@@ -10,7 +10,7 @@ export const corsOptions: CorsOptions = {
             callback(null, true);
             return;
         }
-        const error = Object.assign(new Error(`Origin "${origin}" is not allowed by CORS.`), {
+        const error = Object.assign(new Error(`Origin "${origin}" is not allowed by CORS`), {
             statusCode: 403,
         });
         callback(error);

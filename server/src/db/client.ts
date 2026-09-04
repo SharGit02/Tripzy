@@ -37,4 +37,5 @@ export async function connectDatabase(): Promise<void> {
     if (!result.ok) {
         throw new Error(`Unable to connect to Postgres: ${result.error}`);
     }
+    console.log(`### Connected to Postgres successfully. Latency: ${result.latencyMs}ms`);
 }
