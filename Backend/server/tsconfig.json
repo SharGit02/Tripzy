@@ -1,6 +1,6 @@
 {
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "src/db/schema.sqlite.ts"],
+  "exclude": ["node_modules", "dist"],
 
   // Visit https://aka.ms/tsconfig to read more about this file
 

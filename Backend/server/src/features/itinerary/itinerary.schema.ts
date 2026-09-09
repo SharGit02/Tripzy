@@ -149,6 +149,8 @@ export const ItineraryOutputSchema = z.object({
     version: z.string().default("1.0"),
 });
 
+export const MAX_ITINERARY_DAYS = 14;
+
 export const DirectItineraryInputSchema = z.object({
     destination: z.string().min(2).max(150),
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -164,6 +166,17 @@ export const DirectItineraryInputSchema = z.object({
     travelStyle: TravelStyleSchema.default("balanced"),
     specialRequests: z.string().max(2000).optional(),
     budget: z.number().positive().optional(),
+}).refine((data) => data.endDate >= data.startDate, {
+    message: "End date must be on or after the start date.",
+    path: ["endDate"],
+}).refine((data) => {
+    const start = new Date(`${data.startDate}T00:00:00`);
+    const end = new Date(`${data.endDate}T00:00:00`);
+    const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+    return days <= MAX_ITINERARY_DAYS;
+}, {
+    message: `Trips can be at most ${MAX_ITINERARY_DAYS} days so the planner can return a complete itinerary.`,
+    path: ["endDate"],
 });
 
 export const RegenerateInputSchema = z.object({

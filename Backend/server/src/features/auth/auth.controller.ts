@@ -43,7 +43,6 @@ function clearAuthCookies(res: Response): void {
 
 export async function signup(req: Request, res: Response): Promise<void> {
     try {
-        console.log("[SIGNUP] Request body:", req.body);
         const parsed = signupSchema.safeParse(req.body);
         if (!parsed.success) {
             console.log("[SIGNUP] Validation error:", parsed.error.flatten().fieldErrors);
@@ -102,16 +101,13 @@ export async function signup(req: Request, res: Response): Promise<void> {
 
 export async function login(req: Request, res: Response): Promise<void> {
     try {
-        console.log("[LOGIN] Request body:", req.body);
         const parsed = loginSchema.safeParse(req.body);
         if (!parsed.success) {
-            console.log("[LOGIN] Validation error:", parsed.error.flatten().fieldErrors);
             res.status(400).json({ message: "Invalid login data.", errors: parsed.error.flatten().fieldErrors });
             return;
         }
 
         const { email, password } = parsed.data;
-        console.log("[LOGIN] Parsed data:", { email, password: "***" });
 
         const user = await userRepository.findByEmail(email);
         if (!user) {

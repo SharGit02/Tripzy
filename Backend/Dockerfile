@@ -18,7 +18,7 @@ RUN pip3 install --break-system-packages --no-cache-dir -r /app/ml-microservice/
 COPY server/package.json server/package-lock.json /app/server/
 WORKDIR /app/server
 RUN npm ci --ignore-scripts \
-    && npm rebuild bcrypt better-sqlite3
+    && npm rebuild bcrypt
 
 COPY server/ /app/server/
 RUN npm run build \

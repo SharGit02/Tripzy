@@ -81,8 +81,8 @@ RETURN EXACTLY THIS JSON STRUCTURE:
 
 RULES FOR ITINERARY:
 - Exactly the requested number of itinerary days.
-- Each day should contain 3-5 meaningful activities whenever possible.
-- Maximum 6 activities per day.
+- Each day should contain 3 meaningful activities (max 4).
+- Keep every description to one short sentence.
 - First activity should generally start around 08:00-10:00 unless arrival timing requires otherwise.
 - Include realistic meal breaks.
 - Include transport when moving between areas.
@@ -325,7 +325,8 @@ budget_range
             ),
             system: ITINERARY_SYSTEM_PROMPT,
             temperature: 0.35,
-            maxOutputTokens: 4500,
+            maxOutputTokens: 8192,
+            timeoutMs: 90_000,
             validate: (value) => {
                 if (!value || typeof value !== "object") {
                     throw new Error(
@@ -428,7 +429,8 @@ Every day must contain 3-6 activities.
             system:
                 "You are Tripzy's travel planner. Return only valid JSON.",
             temperature: 0.35,
-            maxOutputTokens: 4500,
+            maxOutputTokens: 8192,
+            timeoutMs: 90_000,
             validate: (value) => value,
         });
 

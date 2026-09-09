@@ -9,6 +9,7 @@ import {
     DirectItineraryInputSchema,
     RegenerateInputSchema,
 } from "./itinerary.schema.js";
+import { GeminiContentError } from "../../services/ai/gemini.provider.js";
 
 export async function getQuestions(req: Request, res: Response): Promise<void> {
     try {
@@ -82,6 +83,10 @@ export async function generateDirectItinerary(req: Request, res: Response): Prom
         console.error("Generate direct itinerary error:", error);
         if (error instanceof z.ZodError) {
             res.status(422).json({ message: "AI returned invalid data", errors: error.flatten().fieldErrors });
+            return;
+        }
+        if (error instanceof GeminiContentError) {
+            res.status(error.statusCode ?? 422).json({ message: error.message });
             return;
         }
         if (error instanceof Error) {

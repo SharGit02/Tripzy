@@ -46,6 +46,26 @@ const handleGenerateItinerary = useCallback(
       return;
     }
 
+    const start = new Date(`${startDate}T00:00:00`);
+    const end = new Date(`${endDate}T00:00:00`);
+    const tripDays = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+    if (end < start) {
+      setItineraryState({
+        status: "error",
+        itinerary: null,
+        error: "End date must be on or after the start date",
+      });
+      return;
+    }
+    if (tripDays > 14) {
+      setItineraryState({
+        status: "error",
+        itinerary: null,
+        error: "Trips can be at most 14 days",
+      });
+      return;
+    }
+
     const payload = {
       destination,
       startDate,
@@ -205,6 +225,7 @@ setItineraryState({
                   />
                 </div>
               </div>
+              <p className="text-xs text-slate-500 -mt-2">Maximum 14 days. Longer ranges cannot be planned in one request.</p>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
