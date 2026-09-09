@@ -42,14 +42,18 @@ export default function DashboardPage() {
       .finally(() => {
         if (isMounted) setLoading(false);
       });
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const weatherCity = profile?.homeCity?.trim() || DEFAULT_WEATHER_CITY;
 
   // Derived stats
   const uniquePlaces = new Set(
-    bookings.filter((b) => b.destination).map((b) => b.destination.toLowerCase())
+    bookings
+      .filter((b) => b.destination)
+      .map((b) => b.destination.toLowerCase()),
   ).size;
 
   return (
@@ -65,10 +69,8 @@ export default function DashboardPage() {
 
         {/* ── Full page grid ─────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
-
           {/* ── LEFT COLUMN ── */}
           <div className="flex flex-col gap-5">
-
             {/* 1. Welcome Banner */}
             <WelcomeBanner userName={user?.name} />
 
@@ -115,7 +117,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Full-width: Journey Stats ── */}
-        <div className="mt-5">
+        <div className="mt-5 mb-10">
           <JourneyStats
             trips={bookings.length}
             places={uniquePlaces}

@@ -3,24 +3,47 @@ import { Link } from "react-router-dom";
 import logoImg from "../../assets/images/logo.png";
 
 const GithubIcon = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" /></svg>
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+  </svg>
 );
 const MailIcon = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </svg>
 );
 
 const COMPANY_LINKS = [
   { label: "About Us", href: "#" },
   { label: "Careers", href: "#" },
   { label: "Press", href: "#" },
-  { label: "Blog", href: "#" }
+  { label: "Blog", href: "#" },
 ];
 
 const SUPPORT_LINKS = [
   { label: "Help Center", href: "#" },
   { label: "Contact Us", href: "#" },
   { label: "FAQs", href: "#" },
-  { label: "Privacy Policy", href: "#" }
+  { label: "Privacy Policy", href: "#" },
 ];
 
 const SOCIALS = [
@@ -28,7 +51,7 @@ const SOCIALS = [
   { icon: MailIcon, label: "Email", href: "#" },
 ];
 
-export default function Footer({ onOpenAuth }) {
+export default function Footer({ onOpenAuth, className = "" }) {
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
 
@@ -48,7 +71,9 @@ export default function Footer({ onOpenAuth }) {
   };
 
   return (
-    <footer className="relative border-t py-12 px-6 overflow-hidden bg-[#0f2442] text-white border-white/10 mt-auto">
+    <footer
+      className={`relative border-t py-12 px-6 overflow-hidden bg-[#0f2442] text-white border-white/10 mt-auto ${className}`}
+    >
       {/* Background subtle glow */}
       <div
         className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-32 opacity-15 pointer-events-none"
@@ -57,14 +82,18 @@ export default function Footer({ onOpenAuth }) {
 
       <div className="max-w-6xl mx-auto relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 pb-10 border-b border-white/10">
-
           {/* Brand */}
           <div className="sm:col-span-2 md:col-span-1">
             <Link to="/" className="inline-block mb-3">
-              <img src={logoImg} alt="Tripzy" className="h-9 w-auto object-contain" />
+              <img
+                src={logoImg}
+                alt="Tripzy"
+                className="h-9 w-auto object-contain"
+              />
             </Link>
             <p className="text-xs text-white/70 leading-relaxed max-w-[220px]">
-              Tripzy is your smart travel companion to plan, explore and experience unforgettable journeys.
+              Tripzy is your smart travel companion to plan, explore and
+              experience unforgettable journeys.
             </p>
           </div>
 
@@ -76,7 +105,10 @@ export default function Footer({ onOpenAuth }) {
             <ul className="space-y-2 text-xs text-white/70">
               {COMPANY_LINKS.map((item) => (
                 <li key={item.label}>
-                  <a href={item.href} className="hover:text-[#91E5F6] transition-colors">
+                  <a
+                    href={item.href}
+                    className="hover:text-[#91E5F6] transition-colors"
+                  >
                     {item.label}
                   </a>
                 </li>
@@ -114,7 +146,10 @@ export default function Footer({ onOpenAuth }) {
             <ul className="space-y-2 text-xs text-white/70">
               {SUPPORT_LINKS.map((item) => (
                 <li key={item.label}>
-                  <a href={item.href} className="hover:text-[#91E5F6] transition-colors">
+                  <a
+                    href={item.href}
+                    className="hover:text-[#91E5F6] transition-colors"
+                  >
                     {item.label}
                   </a>
                 </li>
@@ -139,9 +174,13 @@ export default function Footer({ onOpenAuth }) {
                 </a>
               ))}
             </div>
-            <p className="text-xs font-bold text-white mb-2">Subscribe to our newsletter</p>
+            <p className="text-xs font-bold text-white mb-2">
+              Subscribe to our newsletter
+            </p>
             {subscribed ? (
-              <p className="text-xs text-emerald-400 font-semibold">✓ You're subscribed!</p>
+              <p className="text-xs text-emerald-400 font-semibold">
+                ✓ You're subscribed!
+              </p>
             ) : (
               <form onSubmit={handleSubscribe} className="flex gap-2">
                 <input
@@ -161,7 +200,6 @@ export default function Footer({ onOpenAuth }) {
               </form>
             )}
           </div>
-
         </div>
 
         {/* Bottom bar */}
