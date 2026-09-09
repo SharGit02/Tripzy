@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutGrid,
-  ShoppingBag,
+  Map,
   Calendar,
   Crown,
   Bell,
@@ -35,7 +35,7 @@ export default function UserNavbar() {
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutGrid },
-    { name: "Catalog", path: "/catalog", icon: ShoppingBag },
+    { name: "Plan", path: "/plan", icon: Map },
     { name: "My Itineraries", path: "/bookings", icon: Calendar },
   ];
 
@@ -69,7 +69,7 @@ export default function UserNavbar() {
     try {
       await logoutUser();
     } finally {
-      navigate("/login", { replace: true });
+      navigate("/", { replace: true });
     }
   };
 
@@ -156,7 +156,7 @@ export default function UserNavbar() {
               />
             </button>
 
-            {/* ── Catalog Filter-Style Dialogue Box Popover ── */}
+            {/* Location dropdown */}
             <LocationDropdown isOpen={locationOpen} setIsOpen={setLocationOpen} align="right" />
           </div>
 

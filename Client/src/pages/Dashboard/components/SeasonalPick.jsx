@@ -14,7 +14,7 @@ const SEASONAL_PICKS = [
         description:
             "Misty hills, lush tea gardens and cascading waterfalls—perfect for a refreshing escape.",
         image: munnarImg,
-        link: "/catalog?q=Munnar",
+        link: "/plan?q=Munnar",
     },
 ];
 

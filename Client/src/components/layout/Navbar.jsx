@@ -4,11 +4,9 @@ import { LogIn, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import logoImg from "../../assets/images/logo.png";
-import AuthModal from "../ui/AuthModal";
 
-export default function Navbar() {
+export default function Navbar({ onOpenAuth }) {
   const [scrolled, setScrolled] = useState(false);
-  const [authModal, setAuthModal] = useState(null); // null | "login" | "signup"
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 30);
@@ -50,7 +48,7 @@ export default function Navbar() {
               id="navbar-login"
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => setAuthModal("login")}
+              onClick={() => onOpenAuth?.("login")}
               className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold text-[#133C55] bg-white/80 backdrop-blur-md border border-[#133C55]/20 hover:bg-[#133C55]/10 hover:border-[#133C55]/40 transition-all shadow-xs"
             >
               <LogIn size={15} strokeWidth={2.3} />
@@ -62,7 +60,7 @@ export default function Navbar() {
               id="navbar-signup"
               whileHover={{ scale: 1.05, boxShadow: "0 6px 24px rgba(37,99,235,0.4)" }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => setAuthModal("signup")}
+              onClick={() => onOpenAuth?.("signup")}
               className="flex items-center gap-1.5 px-5 py-2 rounded-full text-sm font-bold text-white bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] hover:from-[#1D4ED8] hover:to-[#1E40AF] transition-all shadow-md"
             >
               <UserPlus size={15} strokeWidth={2.3} />
@@ -72,14 +70,6 @@ export default function Navbar() {
 
         </nav>
       </motion.header>
-
-      {/* ── Floating Auth Modal ── */}
-      {authModal && (
-        <AuthModal
-          defaultTab={authModal}
-          onClose={() => setAuthModal(null)}
-        />
-      )}
     </>
   );
 }

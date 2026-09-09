@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
 import { fetchUserProfile, fetchBookings } from "../../lib/authApi";
 import UserNavbar from "../../components/layout/UserNavbar";
-import { Plus, MapPin, Sparkles } from "lucide-react";
-import { Link } from "react-router-dom";
 
 // Dashboard sub-components
 import WelcomeBanner from "./components/WelcomeBanner";
@@ -74,32 +71,7 @@ export default function DashboardPage() {
             {/* 1. Welcome Banner */}
             <WelcomeBanner userName={user?.name} />
 
-            {/* 2. Plan New Trip Card */}
-            <Link
-              to="/itinerary"
-              className="group rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] p-6 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold mb-1">Plan a New Trip</h2>
-                  <p className="text-blue-100">AI-powered personalized itinerary</p>
-                </div>
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center">
-                    <Sparkles size={28} className="text-white" />
-                  </div>
-                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white text-[#2563EB] flex items-center justify-center font-bold text-sm">
-                    <Plus size={16} />
-                  </span>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-4 text-blue-100 text-sm">
-                <span className="flex items-center gap-1"><MapPin size={14} /> Custom destinations</span>
-                <span className="flex items-center gap-1"><Sparkles size={14} /> Smart recommendations</span>
-              </div>
-            </Link>
-
-            {/* 3. Cost chart + Overview side by side */}
+            {/* Cost chart + Overview side by side */}
             <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-5">
               <TravelCostChart />
               <TravelCostOverview />

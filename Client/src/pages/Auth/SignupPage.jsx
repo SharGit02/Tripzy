@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { User, Mail, Lock, Eye, EyeOff, Plane } from "lucide-react";
 import authBg from "../../assets/images/auth-bg.png";
 import logoImg from "../../assets/images/logo.png";
+import mountainMark from "./tripzy_blue_mountain_transparent.svg";
 import { signupUser } from "../../lib/authApi";
 
 export default function SignupPage() {
@@ -115,61 +116,13 @@ export default function SignupPage() {
             </div>
           </div>
 
-          {/* Travel stamp watermark */}
-          <div className="absolute bottom-4 right-4 pointer-events-none opacity-[0.12]">
-            <svg width="72" height="72" viewBox="0 0 72 72">
-              <circle
-                cx="36"
-                cy="36"
-                r="33"
-                fill="none"
-                stroke="#14b8a6"
-                strokeWidth="2"
-                strokeDasharray="4 3"
-              />
-              <circle
-                cx="36"
-                cy="36"
-                r="27"
-                fill="none"
-                stroke="#14b8a6"
-                strokeWidth="1"
-              />
-              <text
-                x="50%"
-                y="36%"
-                textAnchor="middle"
-                fill="#14b8a6"
-                fontSize="6.5"
-                fontFamily="serif"
-                fontWeight="bold"
-                letterSpacing="1"
-              >
-                TIME TO TRAVEL
-              </text>
-              <text
-                x="50%"
-                y="54%"
-                textAnchor="middle"
-                fill="#14b8a6"
-                fontSize="12"
-                fontFamily="serif"
-              >
-                ✈
-              </text>
-              <text
-                x="50%"
-                y="70%"
-                textAnchor="middle"
-                fill="#14b8a6"
-                fontSize="5.5"
-                fontFamily="serif"
-                letterSpacing="0.5"
-              >
-                EXPLORE INDIA
-              </text>
-            </svg>
-          </div>
+          {/* Mountain watermark */}
+          <img
+            src={mountainMark}
+            alt=""
+            aria-hidden="true"
+            className="absolute bottom-0 -right-10 w-36 sm:w-44 pointer-events-none select-none opacity-[0.22]"
+          />
 
           {/* Form + Social side-by-side */}
           <div className="w-full max-w-md flex items-stretch gap-5">

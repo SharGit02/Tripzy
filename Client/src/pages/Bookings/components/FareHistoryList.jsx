@@ -23,7 +23,7 @@ export default function FareHistoryList({ history, loading }) {
             <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-12 text-center">
                 <TrendingUp size={32} className="mx-auto mb-3 text-slate-300" />
                 <p className="text-base font-semibold text-[#0f2442] mb-1">No fare searches yet</p>
-                <p className="text-sm text-slate-500">Search a trip on the Catalog page and it'll show up here.</p>
+                <p className="text-sm text-slate-500">Search a trip on the Plan page and it'll show up here.</p>
             </div>
         );
     }

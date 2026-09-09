@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" fill="none">
+  <g opacity="0.95">
+    <!-- Back mountain -->
+    <path d="M95 390 L300 125 L395 230 L505 95 L805 390 Z" fill="#DCEFF9"/>
+    <path d="M505 95 L805 390 L390 390 Z" fill="#CBE7F5"/>
+    <!-- Main blue mountain -->
+    <path d="M20 390 L285 70 L420 235 L565 115 L880 390 Z" fill="#A9D8EF"/>
+    <path d="M285 70 L420 235 L470 175 L880 390 L390 390 Z" fill="#D7EDF7"/>
+    <!-- Deep blue mountain face -->
+    <path d="M20 390 L285 70 L355 157 L270 205 L330 255 L250 300 L295 390 Z" fill="#1767B1"/>
+    <path d="M285 70 L420 235 L355 157 Z" fill="#0B4D91"/>
+    <!-- Snow / light cap -->
+    <path d="M285 70 L248 116 L278 108 L300 137 L319 125 L355 157 Z" fill="#F7FCFF"/>
+    <!-- Right blue ridge -->
+    <path d="M420 235 L565 115 L625 185 L665 164 L880 390 L575 390 Z" fill="#3A86C5"/>
+    <path d="M565 115 L625 185 L665 164 L720 220 L650 207 L610 235 Z" fill="#1C67A9"/>
+    <!-- Foreground pale ridge -->
+    <path d="M0 390 Q190 315 370 350 Q540 380 700 325 Q805 290 900 335 L900 420 L0 420 Z" fill="#E7F5FA"/>
+    <path d="M0 390 Q190 315 370 350 Q540 380 700 325 Q805 290 900 335" stroke="#B9DDED" stroke-width="4"/>
+  </g>
+</svg>

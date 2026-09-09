@@ -1,66 +1,11 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
 import { TriangleAlert } from "lucide-react";
 import airplaneImg from "../../../assets/images/Airplane.png";
 import BoardingPassSearch from "./BoardingPassSearch";
-import { fetchFlightFarePrediction } from "../../../lib/authApi";
 
-// Default window scanned for "cheapest days to fly" — a fixed default rather
-// than a form field, since BoardingPassSearch's "Duration" picks a travel
-// *date* (and an optional return date), not a fare-scan window size.
-const DEFAULT_WINDOW_DAYS = 30;
-
-// Local YYYY-MM-DD, not toISOString() — that shifts by the viewer's UTC
-// offset and can land on the wrong calendar day.
-function toIsoDate(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-export default function CatalogHero() {
-  const navigate = useNavigate();
-  const [searchError, setSearchError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSearch = async (search) => {
-    const origin = search.fromCity?.trim();
-    const destination = search.whereTo?.trim();
-
-    if (!origin || !destination) {
-      setSearchError("Enter both a departure city and a destination.");
-      return;
-    }
-    if (!search.startDate) {
-      setSearchError("Pick a travel date.");
-      return;
-    }
-    if (origin.toLowerCase() === destination.toLowerCase()) {
-      setSearchError("Departure and destination must be different cities.");
-      return;
-    }
-
-    setSearchError("");
-    setSubmitting(true);
-    try {
-      const { prediction } = await fetchFlightFarePrediction({
-        origin,
-        destination,
-        startDate: toIsoDate(search.startDate),
-        windowDays: DEFAULT_WINDOW_DAYS,
-      });
-      navigate(`/trip/${prediction.id}`);
-    } catch (err) {
-      setSearchError(err.message || "Unable to search fares for this route.");
-      setSubmitting(false);
-    }
-  };
-
+export default function CatalogHero({ onSearch, submitting = false, searchError = "" }) {
   return (
-    <section className="relative overflow-x-clip bg-gradient-to-b from-[#EBF3FF] via-[#F4F8FF] to-[#F7F9FC] pt-32 md:pt-36 pb-10 px-6 rounded-b-[40px] shadow-sm">
-      {/* ── Seamless Dotted Flight Path connecting Left Heading to Right Airplane ── */}
+    <section className="relative overflow-x-clip bg-gradient-to-b from-[#EBF3FF] via-[#F4F8FF] to-[#F7F9FC] pt-32 md:pt-36 pb-12 px-4 sm:px-8 lg:px-12 rounded-b-[40px] shadow-sm">
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         <svg
           className="w-full h-full text-[#1C3F94] opacity-25"
@@ -68,7 +13,6 @@ export default function CatalogHero() {
           fill="none"
           preserveAspectRatio="none"
         >
-          {/* Continuous Curved Flight Trail */}
           <path
             d="M 120 160 Q 380 40 750 180 T 1150 100"
             stroke="currentColor"
@@ -76,7 +20,6 @@ export default function CatalogHero() {
             strokeDasharray="6 8"
             strokeLinecap="round"
           />
-          {/* Start Pin Dot on Left */}
           <circle cx="120" cy="160" r="5" fill="currentColor" />
           <circle
             cx="120"
@@ -87,19 +30,13 @@ export default function CatalogHero() {
             fill="none"
             opacity="0.6"
           />
-
-          {/* Mid Flight Waypoint Dot */}
           <circle cx="580" cy="120" r="3.5" fill="currentColor" />
-
-          {/* End Flight Trail Dot near Airplane */}
           <circle cx="1150" cy="100" r="4" fill="currentColor" />
         </svg>
       </div>
 
-      <div className="max-w-5xl mx-auto flex flex-col relative z-10">
-        {/* ── Top Hero Row: Left Text + 3D Airplane (Close Together) ── */}
+      <div className="max-w-7xl mx-auto flex flex-col relative z-10">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-8">
-          {/* Left Text */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -114,11 +51,10 @@ export default function CatalogHero() {
             </h1>
 
             <p className="text-sm sm:text-base md:text-lg font-medium text-slate-600 mt-3 max-w-md leading-relaxed">
-              We've handpicked the best packages for your journey.
+              Tell us where you want to go and we will build a day-by-day itinerary.
             </p>
           </motion.div>
 
-          {/* Right 3D Airplane (Shifted right & larger size) */}
           <motion.div
             initial={{ opacity: 0, x: 30, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -135,7 +71,6 @@ export default function CatalogHero() {
           </motion.div>
         </div>
 
-        {/* ── Centered Heading Above Search Bar ── */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -146,25 +81,19 @@ export default function CatalogHero() {
             Where Would You Like to Go?
           </h2>
           <p className="text-xs sm:text-sm md:text-base font-medium text-slate-500 mt-1 max-w-xl mx-auto">
-            Tell us your travel plans, and we'll find the perfect package.
+            Fill in your travel plans, then tap Proceed to generate your itinerary.
           </p>
         </motion.div>
 
-        {/* ── Search Bar ── */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
           className="w-full"
         >
-          <BoardingPassSearch onSearch={handleSearch} disabled={submitting} />
-          {submitting && (
-            <p className="text-center text-sm font-medium text-[#1C3F94] mt-3">
-              Searching fares for this route...
-            </p>
-          )}
+          <BoardingPassSearch onSearch={onSearch} disabled={submitting} />
           {searchError && (
-            <p className="flex items-center justify-center gap-1.5 text-center text-sm font-medium text-red-600 mt-3">
+            <p className="flex items-center justify-center gap-1.5 text-center text-sm font-medium text-red-600 mt-4 px-2 max-w-3xl mx-auto">
               <TriangleAlert size={14} />
               {searchError}
             </p>

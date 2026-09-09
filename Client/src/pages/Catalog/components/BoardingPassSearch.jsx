@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
@@ -243,10 +244,11 @@ const fmt = (d) =>
 export default function BoardingPassSearch({ onSearch, disabled = false }) {
   // Main inputs
   const { currentCity } = useLocationContext();
+  const [searchParams] = useSearchParams();
   const [fromOpen, setFromOpen] = useState(false);
   const fromRef = useRef(null);
 
-  const [whereTo, setWhereTo] = useState("");
+  const [whereTo, setWhereTo] = useState(() => searchParams.get("q") || "");
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [budget, setBudget] = useState("");
@@ -349,7 +351,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
         : null;
 
   return (
-    <div className="w-full max-w-5xl mx-auto relative z-30">
+    <div className="w-full relative z-30">
       {/* ── Flight Ticket / Boarding Pass ── */}
       <div
         className="relative flex flex-col lg:flex-row bg-white rounded-[22px] sm:rounded-[26px] overflow-visible"
@@ -374,9 +376,9 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
           {/* Fields */}
           <div className="flex flex-col sm:flex-row">
             {/* FROM */}
-            <div ref={fromRef} className="relative w-full sm:flex-[2] min-w-0 border-b sm:border-b-0 sm:border-r border-slate-100">
+            <div ref={fromRef} className="relative w-full sm:flex-[2.1] min-w-0 border-b sm:border-b-0 sm:border-r border-slate-100">
               <div
-                className="w-full h-full flex items-start gap-3 px-5 py-4 hover:bg-blue-50/40 transition-colors"
+                className="w-full h-full flex items-start gap-4 px-6 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors"
               >
                 <MapPin
                   size={18}
@@ -392,7 +394,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                     onClick={() => setFromOpen((prev) => !prev)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 transition-all text-xs font-bold text-slate-800"
                   >
-                    <span className="truncate max-w-[85px] sm:max-w-[110px]">
+                    <span className="truncate max-w-[140px] sm:max-w-[180px]">
                       {currentCity}
                     </span>
                     <span className="text-[9px] font-extrabold uppercase text-[#9FADB6] bg-blue-100/80 px-1.5 py-0.5 rounded-md tracking-wider">
@@ -409,7 +411,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
             </div>
 
             {/* WHERE TO */}
-            <div className="w-full sm:flex-[2] min-w-0 flex items-center gap-3 px-5 py-4 hover:bg-blue-50/40 transition-colors">
+            <div className="w-full sm:flex-[2.2] min-w-0 flex items-center gap-4 px-6 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors">
               <MapPin
                 size={18}
                 className="flex-shrink-0"
@@ -437,7 +439,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
               <button
                 type="button"
                 onClick={() => setShowCal((p) => !p)}
-                className="w-full h-full flex items-center gap-3 px-5 py-4 hover:bg-blue-50/40 transition-colors text-left"
+                className="w-full h-full flex items-center gap-4 px-6 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors text-left"
               >
                 <Calendar
                   size={18}
@@ -456,12 +458,20 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                       >
                         {dateLabel}
                       </p>
-                      <button
+                      <span
+                        role="button"
+                        tabIndex={0}
                         onClick={clearDates}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            clearDates(e);
+                          }
+                        }}
                         className="flex-shrink-0 hover:text-red-500 text-gray-400 transition-colors ml-1"
                       >
                         <X size={12} />
-                      </button>
+                      </span>
                     </div>
                   ) : (
                     <p className="text-sm font-bold text-gray-700 mt-0.5 whitespace-nowrap">
@@ -491,7 +501,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
             </div>
 
             {/* BUDGET */}
-            <div className="w-full sm:flex-[1.6] min-w-0 flex items-center gap-3 px-5 py-4 hover:bg-blue-50/40 transition-colors">
+            <div className="w-full sm:flex-[1.8] min-w-0 flex items-center gap-4 px-6 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors">
               <IndianRupee
                 size={18}
                 className="flex-shrink-0"
@@ -527,7 +537,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
               <button
                 type="button"
                 onClick={() => setShowFilters((p) => !p)}
-                className="w-full h-full flex items-center gap-2.5 px-4 sm:px-5 py-4 hover:bg-blue-50/40 transition-colors text-left cursor-pointer group"
+                className="w-full h-full flex items-center gap-3 px-5 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors text-left cursor-pointer group"
               >
                 <SlidersHorizontal
                   size={18}
@@ -912,7 +922,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
           </div>
 
           {/* ── Boarding-pass metadata strip ── */}
-          <div className="flex items-center justify-between gap-3 px-5 sm:px-6 py-2.5 border-t border-dashed border-slate-200 bg-slate-50/60 lg:rounded-bl-[19px]">
+          <div className="flex items-center justify-between gap-4 px-6 sm:px-8 py-3 border-t border-dashed border-slate-200 bg-slate-50/60 lg:rounded-bl-[19px]">
             <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] font-bold tracking-widest text-slate-400 uppercase whitespace-nowrap">
               <Plane size={11} style={{ color: PERSIAN_BLUE }} />
               Tripzy Airways
@@ -973,7 +983,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
           onClick={handleSubmit}
           type="button"
           disabled={disabled}
-          className="relative z-0 w-full lg:w-[210px] flex-shrink-0 flex flex-col items-center justify-center gap-3 px-5 sm:px-6 py-4 lg:py-6 rounded-b-[19px] sm:rounded-b-[23px] lg:rounded-bl-none lg:rounded-r-[23px] overflow-visible hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-60 disabled:pointer-events-none"
+          className="relative z-0 w-full lg:w-[260px] flex-shrink-0 flex flex-col items-center justify-center gap-3 px-6 sm:px-8 py-5 lg:py-7 rounded-b-[19px] sm:rounded-b-[23px] lg:rounded-bl-none lg:rounded-r-[23px] overflow-visible hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-60 disabled:pointer-events-none"
           style={{ backgroundColor: PERSIAN_BLUE }}
         >
           {/* Clipped watermark layer */}

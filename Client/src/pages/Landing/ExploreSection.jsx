@@ -218,7 +218,7 @@ export default function ExploreSection() {
           transition={{ duration: 0.6, delay: 0.4 }}
           className="text-center mt-20"
         >
-          <Link to="/signup">
+          <Link to="/?auth=signup">
             <motion.button
               id="plan-trip-explore-cta"
               whileHover={{ scale: 1.06, boxShadow: "0 12px 35px rgba(56,111,164,0.35)" }}

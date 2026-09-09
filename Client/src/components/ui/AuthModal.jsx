@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Mail, Lock, Eye, EyeOff, User, Plane } from "lucide-react";
+import { X, Mail, Lock, Eye, EyeOff, User, ChevronRight } from "lucide-react";
 import authBg from "../../assets/images/auth-bg.png";
 import logoImg from "../../assets/images/logo.png";
+import mountainMark from "../../pages/Auth/tripzy_blue_mountain_transparent.svg";
 import { loginUser, signupUser } from "../../lib/authApi";
 
 export default function AuthModal({ defaultTab = "login", onClose }) {
@@ -31,7 +32,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!loginForm.email || !loginForm.password) {
-      setLoginError("Please fill in all fields.");
+      setLoginError("Please enter both your email and password.");
       return;
     }
     setLoginLoading(true);
@@ -42,7 +43,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
       onClose?.();
       navigate("/dashboard", { replace: true });
     } catch (authError) {
-      setLoginError(authError.message || "Unable to sign in.");
+      setLoginError(authError.message || "We couldn't sign you in. Please try again.");
     } finally {
       setLoginLoading(false);
     }
@@ -56,7 +57,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
       !signupForm.password ||
       !signupForm.repeat
     ) {
-      setSignupError("Please fill in all fields.");
+      setSignupError("Please fill in your name, email, and both password fields.");
       return;
     }
     if (signupForm.password.length < 8) {
@@ -77,16 +78,16 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
         password: signupForm.password,
       });
       onClose?.();
-      navigate("/catalog", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (authError) {
-      setSignupError(authError.message || "Unable to create account.");
+      setSignupError(authError.message || "We couldn't create your account. Please try again.");
     } finally {
       setSignupLoading(false);
     }
   };
 
   const inputClass =
-    "w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-[#133C55] placeholder-[#94a3b8] outline-none transition-all bg-white";
+    "w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-[#0f2442] placeholder-[#3d5a73] outline-none transition-all bg-white";
   const inputStyle = { border: "1.5px solid #e2e8f0" };
   const onFocus = (e) => (e.target.style.borderColor = "#14b8a6");
   const onBlur = (e) => (e.target.style.borderColor = "#e2e8f0");
@@ -118,7 +119,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-white/80 hover:bg-white text-slate-500 hover:text-slate-800 shadow transition-all"
+            className="absolute top-4 right-4 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-white/80 hover:bg-white text-[#0f2442] hover:text-black shadow transition-all"
             aria-label="Close"
           >
             <X size={16} />
@@ -179,61 +180,13 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
               />
             </div>
 
-            {/* Travel stamp watermark */}
-            <div className="absolute bottom-4 right-4 pointer-events-none opacity-[0.12]">
-              <svg width="72" height="72" viewBox="0 0 72 72">
-                <circle
-                  cx="36"
-                  cy="36"
-                  r="33"
-                  fill="none"
-                  stroke="#14b8a6"
-                  strokeWidth="2"
-                  strokeDasharray="4 3"
-                />
-                <circle
-                  cx="36"
-                  cy="36"
-                  r="27"
-                  fill="none"
-                  stroke="#14b8a6"
-                  strokeWidth="1"
-                />
-                <text
-                  x="50%"
-                  y="36%"
-                  textAnchor="middle"
-                  fill="#14b8a6"
-                  fontSize="6.5"
-                  fontFamily="serif"
-                  fontWeight="bold"
-                  letterSpacing="1"
-                >
-                  TIME TO TRAVEL
-                </text>
-                <text
-                  x="50%"
-                  y="54%"
-                  textAnchor="middle"
-                  fill="#14b8a6"
-                  fontSize="12"
-                  fontFamily="serif"
-                >
-                  ✈
-                </text>
-                <text
-                  x="50%"
-                  y="70%"
-                  textAnchor="middle"
-                  fill="#14b8a6"
-                  fontSize="5.5"
-                  fontFamily="serif"
-                  letterSpacing="0.5"
-                >
-                  EXPLORE INDIA
-                </text>
-              </svg>
-            </div>
+            {/* Mountain watermark */}
+            <img
+              src={mountainMark}
+              alt=""
+              aria-hidden="true"
+              className="absolute bottom-0 -right-0 w-36 sm:w-44 pointer-events-none select-none opacity-[0.22]"
+            />
 
             {/* Form + Social */}
             <div className="w-full max-w-md flex items-stretch gap-5 pt-10">
@@ -269,14 +222,14 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                       <div className="flex flex-col gap-1">
                         <label
                           htmlFor="modal-login-email"
-                          className="text-xs font-semibold text-[#133C55]/75"
+                          className="text-xs font-semibold text-[#0f2442]"
                         >
                           Your Email
                         </label>
                         <div className="relative">
                           <Mail
                             size={15}
-                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#133C55]"
                           />
                           <input
                             id="modal-login-email"
@@ -302,7 +255,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                         <div className="flex items-center justify-between">
                           <label
                             htmlFor="modal-login-password"
-                            className="text-xs font-semibold text-[#133C55]/75"
+                            className="text-xs font-semibold text-[#0f2442]"
                           >
                             Password
                           </label>
@@ -317,7 +270,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                         <div className="relative">
                           <Lock
                             size={15}
-                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#133C55]"
                           />
                           <input
                             id="modal-login-password"
@@ -339,7 +292,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                           <button
                             type="button"
                             onClick={() => setShowLoginPw(!showLoginPw)}
-                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#14b8a6] transition-colors"
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#133C55] hover:text-[#14b8a6] transition-colors"
                           >
                             {showLoginPw ? (
                               <EyeOff size={15} />
@@ -354,31 +307,27 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                         type="submit"
                         disabled={loginLoading}
                         whileHover={{
-                          scale: 1.02,
                           boxShadow: "0 8px 24px rgba(20,184,166,0.35)",
                         }}
-                        whileTap={{ scale: 0.98 }}
+                        whileTap={{ scale: 0.99 }}
                         className="flex items-center justify-between w-full py-3 px-5 rounded-xl text-sm font-bold text-white mt-1 disabled:opacity-70 disabled:cursor-not-allowed"
                         style={{
                           background:
-                            "linear-gradient(135deg, #0f2442 0%, #1f3ccb 100%)",
+                            "linear-gradient(135deg, #0f2442 0%, #1f3ccbff 100%)",
                         }}
                       >
                         <span>
                           {loginLoading ? "Signing in..." : "Sign in"}
                         </span>
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center"
-                          style={{ background: "rgba(255,255,255,0.2)" }}
-                        >
-                          <Plane size={14} className="text-white" />
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center">
+                          <ChevronRight size={24} className="text-white" />
                         </div>
                       </motion.button>
                     </form>
 
                     <p
                       className="text-center text-xs mt-5"
-                      style={{ color: "#94a3b8" }}
+                      style={{ color: "#0f2442" }}
                     >
                       Don't have an account?{" "}
                       <button
@@ -423,14 +372,14 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                       <div className="flex flex-col gap-1">
                         <label
                           htmlFor="modal-signup-name"
-                          className="text-xs font-semibold text-[#133C55]/75"
+                          className="text-xs font-semibold text-[#0f2442]"
                         >
                           Your name
                         </label>
                         <div className="relative">
                           <User
                             size={15}
-                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#133C55]"
                           />
                           <input
                             id="modal-signup-name"
@@ -455,14 +404,14 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                       <div className="flex flex-col gap-1">
                         <label
                           htmlFor="modal-signup-email"
-                          className="text-xs font-semibold text-[#133C55]/75"
+                          className="text-xs font-semibold text-[#0f2442]"
                         >
                           Your Email
                         </label>
                         <div className="relative">
                           <Mail
                             size={15}
-                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#133C55]"
                           />
                           <input
                             id="modal-signup-email"
@@ -487,14 +436,14 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                       <div className="flex flex-col gap-1">
                         <label
                           htmlFor="modal-signup-password"
-                          className="text-xs font-semibold text-[#133C55]/75"
+                          className="text-xs font-semibold text-[#0f2442]"
                         >
                           Create Password
                         </label>
                         <div className="relative">
                           <Lock
                             size={15}
-                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#133C55]"
                           />
                           <input
                             id="modal-signup-password"
@@ -516,7 +465,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                           <button
                             type="button"
                             onClick={() => setShowSignupPw(!showSignupPw)}
-                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#14b8a6] transition-colors"
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#133C55] hover:text-[#14b8a6] transition-colors"
                           >
                             {showSignupPw ? (
                               <EyeOff size={15} />
@@ -530,14 +479,14 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                       <div className="flex flex-col gap-1">
                         <label
                           htmlFor="modal-signup-repeat"
-                          className="text-xs font-semibold text-[#133C55]/75"
+                          className="text-xs font-semibold text-[#0f2442]"
                         >
                           Repeat password
                         </label>
                         <div className="relative">
                           <Lock
                             size={15}
-                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#133C55]"
                           />
                           <input
                             id="modal-signup-repeat"
@@ -559,7 +508,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                           <button
                             type="button"
                             onClick={() => setShowRepeat(!showRepeat)}
-                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#14b8a6] transition-colors"
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#133C55] hover:text-[#14b8a6] transition-colors"
                           >
                             {showRepeat ? (
                               <EyeOff size={15} />
@@ -574,31 +523,27 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                         type="submit"
                         disabled={signupLoading}
                         whileHover={{
-                          scale: 1.02,
                           boxShadow: "0 8px 24px rgba(20,184,166,0.35)",
                         }}
-                        whileTap={{ scale: 0.98 }}
+                        whileTap={{ scale: 0.99 }}
                         className="flex items-center justify-between w-full py-3 px-5 rounded-xl text-sm font-bold text-white mt-1 disabled:opacity-70 disabled:cursor-not-allowed"
                         style={{
                           background:
-                            "linear-gradient(135deg, #0f2442 0%, #1f3ccb 100%)",
+                            "linear-gradient(135deg, #0f2442 0%, #1f3ccbff 100%)",
                         }}
                       >
                         <span>
                           {signupLoading ? "Creating account..." : "Sign up"}
                         </span>
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center"
-                          style={{ background: "rgba(255,255,255,0.2)" }}
-                        >
-                          <Plane size={14} className="text-white" />
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center">
+                          <ChevronRight size={24} className="text-white" />
                         </div>
                       </motion.button>
                     </form>
 
                     <p
                       className="text-center text-xs mt-4"
-                      style={{ color: "#94a3b8" }}
+                      style={{ color: "#0f2442" }}
                     >
                       Already a Member?{" "}
                       <button
@@ -621,7 +566,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                 />
                 <span
                   className="text-xs font-bold tracking-widest"
-                  style={{ color: "#94a3b8" }}
+                  style={{ color: "#0f2442" }}
                 >
                   OR
                 </span>

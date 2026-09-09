@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Navbar from "../../components/layout/Navbar";
 import HeroSection from "./HeroSection";
 import FeaturesSection from "./FeaturesSection";
@@ -9,13 +10,24 @@ import Footer from "../../components/layout/Footer";
 import AuthModal from "../../components/ui/AuthModal";
 
 export default function LandingPage() {
-  const [authModal, setAuthModal] = useState(null); // null | "login" | "signup"
+  const [authModal, setAuthModal] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const auth = searchParams.get("auth");
+    if (auth === "login" || auth === "signup") {
+      setAuthModal(auth);
+      const next = new URLSearchParams(searchParams);
+      next.delete("auth");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   return (
     <div className="min-h-screen bg-[#F4F9FD]">
-      <Navbar />
+      <Navbar onOpenAuth={setAuthModal} />
       <main>
-        <HeroSection />
+        <HeroSection onOpenAuth={setAuthModal} />
         <FeaturesSection />
         <HowItWorksSection />
         <FaqSection />
@@ -23,7 +35,6 @@ export default function LandingPage() {
       </main>
       <Footer onOpenAuth={(tab) => setAuthModal(tab)} />
 
-      {/* Auth Modal Triggered from Final CTA or Footer */}
       {authModal && (
         <AuthModal
           defaultTab={authModal}

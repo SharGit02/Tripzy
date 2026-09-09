@@ -190,7 +190,7 @@ export default function ProfilePage() {
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    try { await logoutUser(); } finally { navigate("/login", { replace: true }); }
+    try { await logoutUser(); } finally { navigate("/", { replace: true }); }
   };
 
   const addInterest = (val) => {

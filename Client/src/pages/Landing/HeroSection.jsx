@@ -2,17 +2,15 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { destinations } from "../../data/destinations";
-import AuthModal from "../../components/ui/AuthModal";
 
 /* ─── tiny helper ─── */
 const wrap = (idx, len) => ((idx % len) + len) % len;
 
-export default function HeroSection() {
+export default function HeroSection({ onOpenAuth }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [cardIdx, setCardIdx] = useState(0);
   const [direction, setDirection] = useState(1);
   const [bgLoaded, setBgLoaded] = useState({});
-  const [authModal, setAuthModal] = useState(null); // null | "login" | "signup"
 
   const dest = destinations[activeIdx];
 
@@ -185,7 +183,7 @@ export default function HeroSection() {
                 <div className="flex flex-wrap items-center gap-4">
                   <motion.button
                     id="plan-trip-hero-cta"
-                    onClick={() => setAuthModal("signup")}
+                    onClick={() => onOpenAuth?.("signup")}
                     whileHover={{
                       scale: 1.05,
                       boxShadow: "0 10px 35px rgba(56, 111, 164, 0.6)",
@@ -336,13 +334,6 @@ export default function HeroSection() {
           scroll
         </span>
       </motion.div>
-      {/* ── Floating Auth Modal ── */}
-      {authModal && (
-        <AuthModal
-          defaultTab={authModal}
-          onClose={() => setAuthModal(null)}
-        />
-      )}
     </section>
   );
 }

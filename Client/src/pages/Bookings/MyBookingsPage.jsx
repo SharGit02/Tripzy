@@ -185,7 +185,7 @@ export default function MyBookingsPage() {
 
           <div className="mt-12">
             <h2 className="text-2xl font-extrabold mb-2">Fare Searches</h2>
-            <p className="text-[#386FA4] mb-6">Past fare predictions from your Catalog searches.</p>
+            <p className="text-[#386FA4] mb-6">Past fare predictions from your Plan searches.</p>
             <FareHistoryList history={fareHistory} loading={fareHistoryLoading} />
           </div>
         </main>

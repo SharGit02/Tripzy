@@ -65,7 +65,7 @@ export default function JourneyStats({ trips = 0, places = 0, itineraries = 2 })
                         Find a destination worth remembering.
                     </p>
                     <Link
-                        to="/catalog"
+                        to="/plan"
                         className="inline-flex items-center gap-1.5 bg-white text-[#0f2442] text-xs font-bold px-4 py-2 rounded-xl hover:bg-slate-100 transition-colors shadow-sm"
                     >
                         Plan a Trip
