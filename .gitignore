@@ -1,1 +1,101 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+
+# Database / local DB files
+*.db
+*.sqlite
+*.sqlite3
+server/tripzy.db
+
+# Logs
+*.log
+server.log
+server-output.txt
+ml-microservice/*.log
+
+# Cookies / auth test files
+cookies*.txt
+server/cookies*.txt
+
+# Local installers / binaries
+*.exe
+
+# Temporary / backup files
+*.bak
+*.tmp
+original.*.ts
+
+# Test/debug scripts created locally
+server/test-*.js
+server/test-*.mjs
+server/test-*.cjs
+server/test-*.ts
+test-*.ts
+test-*.js
+test-*.mjs
+test-*.cjs
+
+# Generated/local helper scripts
+check.bat
+restart-server.bat
+start-all.bat
+start-all.sh
+start-server.bat
+stop-all.bat
+stop-all.sh
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build outputs
+dist/
+build/
+.next/
+.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Existing
 knowledge
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Cookies / session data
+cookies*.txt
+
+# Python virtual environments
+venv/
+.venv/
+
+# OS / IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Local/test artifacts
+server-output.txt
