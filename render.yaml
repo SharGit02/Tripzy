@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: tripzee-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FASTAPI_ML_BASE_URL
+        value: http://127.0.0.1:8000

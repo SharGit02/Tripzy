@@ -14,16 +14,19 @@ node_modules/
 *.sqlite
 *.sqlite3
 server/tripzy.db
+backend/server/tripzy.db
 
 # Logs
 *.log
 server.log
 server-output.txt
 ml-microservice/*.log
+backend/ml-microservice/*.log
 
 # Cookies / auth test files
 cookies*.txt
 server/cookies*.txt
+backend/server/cookies*.txt
 
 # Local installers / binaries
 *.exe
@@ -38,6 +41,10 @@ server/test-*.js
 server/test-*.mjs
 server/test-*.cjs
 server/test-*.ts
+backend/server/test-*.js
+backend/server/test-*.mjs
+backend/server/test-*.cjs
+backend/server/test-*.ts
 test-*.ts
 test-*.js
 test-*.mjs

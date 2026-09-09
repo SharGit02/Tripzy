@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import cookieParser from "cookie-parser"; const app = express();
+import cookieParser from "cookie-parser";
 import chalk from "chalk";
 import morgan from "morgan";
 import helmet from "helmet";
@@ -11,12 +11,13 @@ import { connectDatabase } from "./db/client.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 import router from "./routes/index.js";
 
+const app = express();
+
 // Render (and most single-hop PaaS reverse proxies) sit in front of the app
 // and set X-Forwarded-For. Trusting exactly one hop lets express-rate-limit
 // (and req.ip generally) resolve the real client IP instead of the proxy's.
 app.set("trust proxy", 1);
 
-// middlewares
 app.use(morgan("dev"));
 app.use(helmet());
 app.use(cors(corsOptions));
@@ -24,23 +25,19 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-//routes
 app.use("/api", router);
 app.use(errorMiddleware);
 
 async function startServer() {
-    app.listen(process.env.PORT || 5000, () => {
-        console.log(`Server running on port ${process.env.PORT || 5000}`);
+    await connectDatabase();
+    app.listen(env.PORT, () => {
+        console.log(chalk.green(`### Server is running on port ${env.PORT}`));
+        console.log(chalk.blue(`### Allowed origins: ${env.CORS_ORIGIN_LIST.join(", ")}`));
+        console.log(chalk.yellow(`### NODE_ENV resolved to: "${env.NODE_ENV}"`));
     });
 }
 
 startServer().catch((error) => {
     console.error("Failed to start server:", error);
     process.exit(1);
-});
-
-app.listen(env.PORT, async () => {
-  console.log(chalk.green(`### Server is running on port ${env.PORT}`));
-  console.log(chalk.blue(`### Allowed origins: ${env.CORS_ORIGIN_LIST.join(", ")}`));
-  console.log(chalk.yellow(`### NODE_ENV resolved to: "${env.NODE_ENV}"`));
 });
