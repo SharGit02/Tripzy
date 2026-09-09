@@ -8,6 +8,7 @@ import {
     GenerateQuestionsInputSchema,
     DirectItineraryInputSchema,
     RegenerateInputSchema,
+    formatZodError,
 } from "./itinerary.schema.js";
 import { GeminiContentError } from "../../services/ai/gemini.provider.js";
 
@@ -15,7 +16,7 @@ export async function getQuestions(req: Request, res: Response): Promise<void> {
     try {
         const parsed = GenerateQuestionsInputSchema.safeParse(req.body);
         if (!parsed.success) {
-            res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten().fieldErrors });
+            res.status(400).json(formatZodError(parsed.error));
             return;
         }
 
@@ -60,7 +61,7 @@ export async function generateDirectItinerary(req: Request, res: Response): Prom
     try {
         const parsed = DirectItineraryInputSchema.safeParse(req.body);
         if (!parsed.success) {
-            res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten().fieldErrors });
+            res.status(400).json(formatZodError(parsed.error));
             return;
         }
 
@@ -82,7 +83,10 @@ export async function generateDirectItinerary(req: Request, res: Response): Prom
     } catch (error) {
         console.error("Generate direct itinerary error:", error);
         if (error instanceof z.ZodError) {
-            res.status(422).json({ message: "AI returned invalid data", errors: error.flatten().fieldErrors });
+            res.status(422).json({
+                message: "We couldn't finish that itinerary. Try a shorter trip or different dates.",
+                errors: error.flatten().fieldErrors,
+            });
             return;
         }
         if (error instanceof GeminiContentError) {
@@ -91,11 +95,11 @@ export async function generateDirectItinerary(req: Request, res: Response): Prom
         }
         if (error instanceof Error) {
             if (error.message.includes("API key") || error.message.includes("not configured")) {
-                res.status(503).json({ message: "AI service not configured" });
+                res.status(503).json({ message: "The trip planner isn't configured right now. Please try again later." });
                 return;
             }
         }
-        res.status(500).json({ message: "Failed to generate itinerary" });
+        res.status(500).json({ message: "We couldn't create your itinerary. Please try again." });
     }
 }
 
@@ -173,7 +177,7 @@ export async function regenerateItinerary(req: Request, res: Response): Promise<
         const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const parsed = RegenerateInputSchema.safeParse(req.body);
         if (!parsed.success) {
-            res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten().fieldErrors });
+            res.status(400).json(formatZodError(parsed.error));
             return;
         }
 
@@ -190,7 +194,7 @@ export async function regenerateItinerary(req: Request, res: Response): Promise<
                 return;
             }
             if (error.message.includes("API key")) {
-                res.status(503).json({ message: "AI service not configured" });
+                res.status(503).json({ message: "The trip planner isn't configured right now. Please try again later." });
                 return;
             }
         }

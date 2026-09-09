@@ -152,22 +152,26 @@ export const ItineraryOutputSchema = z.object({
 export const MAX_ITINERARY_DAYS = 14;
 
 export const DirectItineraryInputSchema = z.object({
-    destination: z.string().min(2).max(150),
-    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    adults: z.number().int().positive().default(2),
-    children: z.number().int().nonnegative().default(0),
-    rooms: z.number().int().positive().default(1),
+    destination: z
+        .string()
+        .trim()
+        .min(2, "Enter a destination of at least 2 characters.")
+        .max(150, "Destination can be at most 150 characters."),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a valid start date."),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a valid return date."),
+    adults: z.coerce.number().int("Adults must be a whole number.").positive("Add at least 1 adult.").max(10, "Adults can be at most 10.").default(2),
+    children: z.coerce.number().int("Children must be a whole number.").nonnegative("Children cannot be negative.").max(10, "Children can be at most 10.").default(0),
+    rooms: z.coerce.number().int("Rooms must be a whole number.").positive("Add at least 1 room.").max(10, "Rooms can be at most 10.").default(1),
     accommodationType: AccommodationTypeSchema.default("standard"),
     preferredTransport: TransportModeSchema.optional(),
     tripType: TripTypeSchema.default("couple"),
     interests: z.array(z.enum(["nature", "adventure", "beaches", "spiritual", "shopping", "food", "wildlife", "history"])).default([]),
     wheelchairAccessible: z.boolean().default(false),
     travelStyle: TravelStyleSchema.default("balanced"),
-    specialRequests: z.string().max(2000).optional(),
-    budget: z.number().positive().optional(),
+    specialRequests: z.string().max(2000, "Special requests can be at most 2000 characters.").optional(),
+    budget: z.coerce.number().positive("Enter a budget greater than 0, or leave it blank.").optional(),
 }).refine((data) => data.endDate >= data.startDate, {
-    message: "End date must be on or after the start date.",
+    message: "Return date must be on or after the start date.",
     path: ["endDate"],
 }).refine((data) => {
     const start = new Date(`${data.startDate}T00:00:00`);
@@ -179,8 +183,23 @@ export const DirectItineraryInputSchema = z.object({
     path: ["endDate"],
 });
 
+export function formatZodError(error: z.ZodError) {
+    const { fieldErrors, formErrors } = error.flatten();
+    const messages = [
+        ...formErrors,
+        ...Object.values(fieldErrors).flat().filter((msg): msg is string => Boolean(msg)),
+    ];
+    return {
+        message: messages[0] || "Please check your trip details and try again.",
+        errors: fieldErrors,
+    };
+}
+
 export const RegenerateInputSchema = z.object({
-    modifications: z.string().min(10).max(2000),
+    modifications: z
+        .string()
+        .min(10, "Describe the changes in at least 10 characters.")
+        .max(2000, "Keep change notes under 2000 characters."),
     preserveStructure: z.boolean().default(true),
 });
 
