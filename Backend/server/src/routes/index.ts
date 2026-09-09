@@ -18,6 +18,7 @@ router.use("/bookings", bookingRoutes);
 router.use("/search-history", searchHistoryRoutes);
 router.use("/weather", weatherRoutes);
 router.use("/flight-fare", flightFareRoutes);
+router.use("/plan", itineraryRoutes);
 router.use("/itinerary", itineraryRoutes);
 
 export default router;

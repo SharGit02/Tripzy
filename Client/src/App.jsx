@@ -1,13 +1,10 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import LandingPage from "./pages/Landing/LandingPage";
-import LoginPage from "./pages/Auth/LoginPage";
-import SignupPage from "./pages/Auth/SignupPage";
 import CatalogPage from "./pages/Catalog/CatalogPage";
 import DashboardPage from "./pages/Dashboard/DashboardPage";
 import MyBookingsPage from "./pages/Bookings/MyBookingsPage";
 import TripPage from "./pages/Trip/TripPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
-import ItineraryPlannerPage from "./pages/Itinerary/ItineraryPlannerPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import "./styles/index.css";
 
@@ -16,9 +13,18 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/catalog" element={<CatalogPage />} />
+        <Route path="/login" element={<Navigate to="/?auth=login" replace />} />
+        <Route path="/signup" element={<Navigate to="/?auth=signup" replace />} />
+        <Route path="/catalog" element={<Navigate to="/plan" replace />} />
+        <Route path="/itinerary" element={<Navigate to="/plan" replace />} />
+        <Route
+          path="/plan"
+          element={
+            <ProtectedRoute>
+              <CatalogPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={
@@ -51,16 +57,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/itinerary"
-          element={
-            <ProtectedRoute>
-              <ItineraryPlannerPage />
-            </ProtectedRoute>
-          }
-        />
       </Routes>
     </BrowserRouter>
   );
 }
-

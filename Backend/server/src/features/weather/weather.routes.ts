@@ -4,7 +4,7 @@ import { getWeather } from "./weather.controller.js";
 
 const router = Router();
 
-// Public: the catalog/landing surfaces show weather before sign-in. It is rate
+// Public: the plan/landing surfaces show weather before sign-in. It is rate
 // limited because every miss costs a call against our OpenWeather quota.
 router.get("/", weatherRateLimiter, getWeather);
 

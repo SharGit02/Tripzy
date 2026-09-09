@@ -46,7 +46,7 @@ export default function TripPage() {
             <UserNavbar />
             <main className="pt-28 px-6 pb-16 max-w-5xl mx-auto">
                 <Link
-                    to="/catalog"
+                    to="/plan"
                     className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-[#2563EB] transition-colors mb-4"
                 >
                     <ArrowLeft size={15} />

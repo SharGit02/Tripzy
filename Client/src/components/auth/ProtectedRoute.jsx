@@ -30,7 +30,7 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (status === "unauthenticated") {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/?auth=login" replace />;
   }
 
   return children;
