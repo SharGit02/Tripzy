@@ -21,9 +21,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from app import predictor
 from app.schemas import HealthResponse, PredictWindowRequest, PredictWindowResponse
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR.parent / ".env")
+load_dotenv(BASE_DIR / ".env", override=True)
 MODEL_PATH = os.environ.get("ML_MODEL_PATH", str(BASE_DIR / "models" / "flight_fare_model.pkl"))
 DATA_PATH = os.environ.get(
     "ML_DATA_PATH", str(BASE_DIR / "data" / "Indian_Domestic_Flight_Historical_Dataset_FINAL.parquet")

@@ -2,8 +2,8 @@ services:
   - type: web
     name: tripzee-api
     runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerfilePath: ./Backend/Dockerfile
+    dockerContext: ./Backend
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
