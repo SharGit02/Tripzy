@@ -31,7 +31,16 @@ app.use(express.json());
 app.use("/api", router);
 app.use(errorMiddleware);
 
-await connectDatabase();
+async function startServer() {
+    app.listen(process.env.PORT || 5000, () => {
+        console.log(`Server running on port ${process.env.PORT || 5000}`);
+    });
+}
+
+startServer().catch((error) => {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+});
 
 app.listen(env.PORT, async () => {
   console.log(chalk.green(`###Server is running on port ${env.PORT}`));

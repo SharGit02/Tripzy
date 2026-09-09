@@ -18,7 +18,7 @@ async function rawFetch(path, options = {}) {
   return { response, data };
 }
 
-async function request(path, options = {}, { isRetry = false } = {}) {
+export async function request(path, options = {}, { isRetry = false } = {}) {
   const { response, data } = await rawFetch(path, options);
 
   // On a 401, transparently try to refresh the session and retry the request
@@ -114,4 +114,62 @@ export function fetchFlightFareHistory() {
 
 export function fetchFlightFarePredictionById(id) {
   return request(`/flight-fare/${id}`);
+}
+
+// Itinerary API functions - Direct generation only
+export function generateItinerary(payload) {
+  return request("/itinerary/generate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchItineraries(limit = 20, offset = 0) {
+  return request(`/itinerary?limit=${limit}&offset=${offset}`);
+}
+
+export function fetchItineraryById(id) {
+  return request(`/itinerary/${id}`);
+}
+
+export async function downloadItineraryPdf(id) {
+  const response = await fetch(`${API_BASE_URL}/api/itinerary/${id}/pdf`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    let message = "Failed to download PDF.";
+
+    try {
+      const data = await response.json();
+      message = data.message || message;
+    } catch {
+      // Response wasn't JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  return response;
+}
+
+export function regenerateItinerary(id, modifications) {
+  return request(`/itinerary/${id}/regenerate`, {
+    method: "POST",
+    body: JSON.stringify({ modifications, preserveStructure: true }),
+  });
+}
+
+export function updateItinerary(id, fields) {
+  return request(`/itinerary/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(fields),
+  });
+}
+
+export function deleteItinerary(id) {
+  return request(`/itinerary/${id}`, {
+    method: "DELETE",
+  });
 }

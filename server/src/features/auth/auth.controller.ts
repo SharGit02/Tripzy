@@ -43,32 +43,42 @@ function clearAuthCookies(res: Response): void {
 
 export async function signup(req: Request, res: Response): Promise<void> {
     try {
+        console.log("[SIGNUP] Request body:", req.body);
         const parsed = signupSchema.safeParse(req.body);
         if (!parsed.success) {
+            console.log("[SIGNUP] Validation error:", parsed.error.flatten().fieldErrors);
             res.status(400).json({ message: "Invalid signup data.", errors: parsed.error.flatten().fieldErrors });
             return;
         }
 
         const { name, email, password } = parsed.data;
+        console.log("[SIGNUP] Parsed data:", { name, email, password: "***" });
 
         const passwordCheck = authService.validatePassword(password);
         if (!passwordCheck.valid) {
+            console.log("[SIGNUP] Password validation failed:", passwordCheck.message);
             res.status(400).json({ message: passwordCheck.message });
             return;
         }
 
+        console.log("[SIGNUP] Checking existing user...");
         const existingUser = await userRepository.findByEmail(email);
+        console.log("[SIGNUP] Existing user check done:", existingUser ? "found" : "not found");
         if (existingUser) {
+            console.log("[SIGNUP] User already exists:", email);
             res.status(409).json({ message: "An account with that email already exists." });
             return;
         }
 
+        console.log("[SIGNUP] Hashing password...");
         const hashedPassword = await authService.hashPassword(password);
+        console.log("[SIGNUP] Password hashed");
         const user = await userRepository.create({
             name,
             email,
             password: hashedPassword,
         });
+        console.log("[SIGNUP] User created:", user.id);
 
         const payload = {
             userId: user.id,
@@ -84,29 +94,35 @@ export async function signup(req: Request, res: Response): Promise<void> {
             message: "Account created successfully.",
             user: toPublicUser(user),
         });
-    } catch (_error) {
-        res.status(500).json({ message: "Unable to create account." });
+    } catch (error) {
+        console.error("[SIGNUP] Error:", error);
+        res.status(500).json({ message: "Unable to create account.", error: error instanceof Error ? error.message : "Unknown error" });
     }
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
     try {
+        console.log("[LOGIN] Request body:", req.body);
         const parsed = loginSchema.safeParse(req.body);
         if (!parsed.success) {
+            console.log("[LOGIN] Validation error:", parsed.error.flatten().fieldErrors);
             res.status(400).json({ message: "Invalid login data.", errors: parsed.error.flatten().fieldErrors });
             return;
         }
 
         const { email, password } = parsed.data;
+        console.log("[LOGIN] Parsed data:", { email, password: "***" });
 
         const user = await userRepository.findByEmail(email);
         if (!user) {
+            console.log("[LOGIN] User not found:", email);
             res.status(401).json({ message: "Invalid email or password." });
             return;
         }
 
         const passwordMatches = await authService.comparePasswords(password, user.password);
         if (!passwordMatches) {
+            console.log("[LOGIN] Password mismatch for:", email);
             res.status(401).json({ message: "Invalid email or password." });
             return;
         }
@@ -125,8 +141,9 @@ export async function login(req: Request, res: Response): Promise<void> {
             message: "Signed in successfully.",
             user: toPublicUser(user),
         });
-    } catch (_error) {
-        res.status(500).json({ message: "Unable to sign in." });
+    } catch (error) {
+        console.error("[LOGIN] Error:", error);
+        res.status(500).json({ message: "Unable to sign in.", error: error instanceof Error ? error.message : "Unknown error" });
     }
 }
 
@@ -170,8 +187,6 @@ export async function refresh(req: Request, res: Response): Promise<void> {
         role: user.role,
     };
 
-    // Rotate both tokens on every refresh so a stolen refresh token has a short
-    // effective lifetime once the legitimate client refreshes again.
     const accessToken = authService.generateAccessToken(newPayload);
     const refreshToken = authService.generateRefreshToken(newPayload);
     setAuthCookies(res, accessToken, refreshToken);

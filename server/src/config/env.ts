@@ -34,10 +34,25 @@ const envSchema = z
 
         // Gemini generation settings. The keys themselves are not declared here
         // because there is an arbitrary number of them — see collectNumberedKeys.
-        GEMINI_MODEL: z.string().trim().min(1).default("gemini-3.6-flash"),
+        GEMINI_MODEL: z.string().trim().min(1).default("gemini-3.5-flash"),
+        // Comma-separated fallback models tried in order when primary fails.
+        // Example: "gemini-3.6-flash,gemini-flash-latest,gemini-2.5-flash"
+        GEMINI_MODEL_FALLBACKS: z.string().trim().optional(),
         // 60s, not 30s: Gemini 3.x models spend hidden "thinking" tokens before
         // emitting text, and structured-output calls were observed exceeding 30s.
         GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+
+        // NVIDIA API settings (fallback provider)
+        NVIDIA_API_KEY: z.string().trim().optional(),
+        NVIDIA_MODEL: z.string().trim().default("nvidia/nemotron-3-ultra-550b-a55b"),
+        NVIDIA_MODEL_FALLBACKS: z.string().trim().optional(),
+        NVIDIA_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+
+        // OpenCode Zen API settings (Nemotron 3.5 Lightning Free)
+        OPENCODE_ZEN_API_KEY: z.string().trim().optional(),
+        OPENCODE_ZEN_BASE_URL: z.string().trim().default("https://opencode.ai/zen/v1"),
+        OPENCODE_ZEN_MODEL: z.string().trim().default("nemotron-3.5-lightning-free"),
+        OPENCODE_ZEN_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
     })
     .refine((data) => Boolean(data.DATABASE_URL || data.NEON_URI), {
         message: "DATABASE_URL or NEON_URI is required",
@@ -100,4 +115,18 @@ export const env = {
 
     // Gemini keys in waterfall priority order: index 0 is tried first.
     GEMINI_API_KEYS: collectNumberedKeys("GEMINI_API_KEY"),
+    // Model fallback chain (comma-separated, tried in order).
+    GEMINI_MODEL_FALLBACKS: data.GEMINI_MODEL_FALLBACKS,
+
+    // NVIDIA API settings
+    NVIDIA_API_KEY: data.NVIDIA_API_KEY,
+    NVIDIA_MODEL: data.NVIDIA_MODEL,
+    NVIDIA_MODEL_FALLBACKS: data.NVIDIA_MODEL_FALLBACKS,
+    NVIDIA_TIMEOUT_MS: data.NVIDIA_TIMEOUT_MS,
+
+    // OpenCode Zen API settings
+    OPENCODE_ZEN_API_KEY: data.OPENCODE_ZEN_API_KEY,
+    OPENCODE_ZEN_BASE_URL: data.OPENCODE_ZEN_BASE_URL,
+    OPENCODE_ZEN_MODEL: data.OPENCODE_ZEN_MODEL,
+    OPENCODE_ZEN_TIMEOUT_MS: data.OPENCODE_ZEN_TIMEOUT_MS,
 };

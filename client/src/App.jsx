@@ -7,6 +7,7 @@ import DashboardPage from "./pages/Dashboard/DashboardPage";
 import MyBookingsPage from "./pages/Bookings/MyBookingsPage";
 import TripPage from "./pages/Trip/TripPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
+import ItineraryPlannerPage from "./pages/Itinerary/ItineraryPlannerPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import "./styles/index.css";
 
@@ -47,6 +48,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/itinerary"
+          element={
+            <ProtectedRoute>
+              <ItineraryPlannerPage />
             </ProtectedRoute>
           }
         />

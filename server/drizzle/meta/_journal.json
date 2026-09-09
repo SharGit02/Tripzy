@@ -15,6 +15,13 @@
       "when": 1787914962592,
       "tag": "0001_curvy_hiroim",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788493288559,
+      "tag": "0002_eager_venus",
+      "breakpoints": true
     }
   ]
 }
