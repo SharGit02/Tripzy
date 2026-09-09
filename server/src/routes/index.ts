@@ -7,6 +7,7 @@ import searchHistoryRoutes from "../features/search-history/search-history.route
 import healthRoutes from "../features/health/health.routes.js";
 import weatherRoutes from "../features/weather/weather.routes.js";
 import flightFareRoutes from "../features/flightFare/flightFare.routes.js";
+import itineraryRoutes from "../features/itinerary/itinerary.routes.js";
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use("/bookings", bookingRoutes);
 router.use("/search-history", searchHistoryRoutes);
 router.use("/weather", weatherRoutes);
 router.use("/flight-fare", flightFareRoutes);
+router.use("/itinerary", itineraryRoutes);
 
 export default router;

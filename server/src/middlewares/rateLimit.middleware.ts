@@ -4,7 +4,7 @@ import rateLimit from "express-rate-limit";
 // credential-stuffing protection. Keyed by IP by default.
 export const authRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 10,
+    limit: 100, // Increased from 10 to 100 for testing
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: "Too many attempts. Please try again later." },

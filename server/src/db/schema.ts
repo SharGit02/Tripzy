@@ -11,6 +11,7 @@ import {
     date,
     jsonb,
     uniqueIndex,
+    index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -143,6 +144,45 @@ export const flightFarePredictions = pgTable("flight_fare_predictions", {
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── itineraries ───────────────────────────────────────────────────────────
+// AI-generated personalized travel itineraries with full persistence.
+export const itineraries = pgTable("itineraries", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 200 }).notNull(),
+    destination: varchar("destination", { length: 150 }).notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    totalDays: integer("total_days").notNull(),
+    totalBudget: numeric("total_budget", { precision: 12, scale: 2 }),
+    currency: varchar("currency", { length: 3 }).default("INR"),
+    itineraryData: jsonb("itinerary_data").notNull(),
+    userAnswers: jsonb("user_answers"),
+    status: varchar("status", { length: 20 }).notNull().default("draft"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+    userCreatedIdx: index("itineraries_user_created_idx").on(table.userId, table.createdAt),
+}));
+
+// ── itinerary_questions ───────────────────────────────────────────────────
+// Dynamic Q&A flow for each itinerary generation (multi-step, AI-generated questions).
+export const itineraryQuestions = pgTable("itinerary_questions", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itineraryId: uuid("itinerary_id")
+        .notNull()
+        .references(() => itineraries.id, { onDelete: "cascade" }),
+    step: integer("step").notNull(),
+    question: text("question").notNull(),
+    questionType: varchar("question_type", { length: 30 }).notNull(),
+    options: jsonb("options"),
+    answer: jsonb("answer"),
+    isRequired: boolean("is_required").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ── relations (for drizzle relational query API) ───────────────────────
 export const usersRelations = relations(users, ({ one, many }) => ({
     profile: one(userProfiles, {
@@ -182,6 +222,21 @@ export const flightFarePredictionsRelations = relations(flightFarePredictions, (
     }),
 }));
 
+export const itinerariesRelations = relations(itineraries, ({ one, many }) => ({
+    user: one(users, {
+        fields: [itineraries.userId],
+        references: [users.id],
+    }),
+    questions: many(itineraryQuestions),
+}));
+
+export const itineraryQuestionsRelations = relations(itineraryQuestions, ({ one }) => ({
+    itinerary: one(itineraries, {
+        fields: [itineraryQuestions.itineraryId],
+        references: [itineraries.id],
+    }),
+}));
+
 // ── row types ────────────────────────────────────────────────────────────
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
@@ -193,3 +248,7 @@ export type SearchHistoryRow = typeof searchHistory.$inferSelect;
 export type NewSearchHistoryRow = typeof searchHistory.$inferInsert;
 export type FlightFarePredictionRow = typeof flightFarePredictions.$inferSelect;
 export type NewFlightFarePredictionRow = typeof flightFarePredictions.$inferInsert;
+export type ItineraryRow = typeof itineraries.$inferSelect;
+export type NewItineraryRow = typeof itineraries.$inferInsert;
+export type ItineraryQuestionRow = typeof itineraryQuestions.$inferSelect;
+export type NewItineraryQuestionRow = typeof itineraryQuestions.$inferInsert;
