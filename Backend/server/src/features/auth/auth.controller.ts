@@ -15,11 +15,12 @@ function toPublicUser(user: Pick<UserRow, "id" | "name" | "email" | "role">) {
 }
 
 function cookieOptions(maxAge: number) {
+    const isProdLike = env.NODE_ENV === "production" || env.CORS_ORIGIN_LIST.some((o) => o.startsWith("https://"));
     return {
         httpOnly: true,
-        secure: env.NODE_ENV === "production",
-        sameSite: env.NODE_ENV === "production" ? ("none" as const) : ("lax" as const),
-        partitioned: env.NODE_ENV === "production",
+        secure: isProdLike,
+        sameSite: isProdLike ? ("none" as const) : ("lax" as const),
+        partitioned: isProdLike,
         maxAge,
         path: "/",
     };
