@@ -31,7 +31,7 @@
   body {
     background-color: var(--navy);
     color: var(--white);
-    font-family: "Inter", "DM Sans", sans-serif;
+    font-family: "Inter", "DM Sans", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
@@ -72,6 +72,10 @@
 
   .font-sans-secondary {
     font-family: "Cormorant Garamond", Georgia, serif;
+  }
+
+  .font-mono {
+    font-family: "Roboto Mono", "Courier New", monospace;
   }
 
   .glass {

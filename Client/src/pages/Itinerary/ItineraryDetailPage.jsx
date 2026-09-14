@@ -11,7 +11,6 @@ import {
   downloadItineraryPdf,
   regenerateItinerary,
   updateItinerary,
-  createBooking,
 } from "../../lib/authApi";
 
 export default function ItineraryDetailPage() {
@@ -27,8 +26,6 @@ export default function ItineraryDetailPage() {
   const [modifications, setModifications] = useState("");
   const [savingDays, setSavingDays] = useState(false);
   const [shareNotice, setShareNotice] = useState("");
-  const [bookingBusy, setBookingBusy] = useState(false);
-  const [booked, setBooked] = useState(false);
 
   useEffect(() => {
     if (!id) return undefined;
@@ -133,31 +130,6 @@ export default function ItineraryDetailPage() {
     setTimeout(() => setShareNotice(""), 3500);
   }, [id]);
 
-  const handleBook = useCallback(async () => {
-    const itin = state.itinerary;
-    if (!itin || !id) return;
-    setBookingBusy(true);
-    try {
-      await createBooking({
-        type: "package",
-        title: `${itin.destination} itinerary`,
-        destination: itin.destination,
-        startDate: itineraryDate(itin.startDate),
-        endDate: itineraryDate(itin.endDate),
-        guests: 1,
-        totalAmount: safeNumber(itin.budgetBreakdown?.total ?? itin.totalBudget),
-        currency: "INR",
-        notes: "Created from a generated itinerary.",
-        metadata: { itineraryId: id },
-      });
-      setBooked(true);
-      navigate("/bookings");
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "We couldn't create that booking.");
-    } finally {
-      setBookingBusy(false);
-    }
-  }, [id, navigate, state.itinerary]);
 
   return (
     <div className="min-h-screen bg-[#F7F9FC] text-[#133C55] flex flex-col justify-between">
@@ -181,9 +153,6 @@ export default function ItineraryDetailPage() {
             savingDays={savingDays}
             onShare={handleShare}
             shareNotice={shareNotice}
-            onBook={handleBook}
-            bookingBusy={bookingBusy}
-            booked={booked}
             onExportIcs={() => downloadItineraryIcs(state.itinerary)}
             loadingTitle="Loading your itinerary..."
             loadingSubtitle="Fetching the saved plan for this trip."

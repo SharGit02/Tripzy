@@ -168,12 +168,37 @@ export default function ItineraryMap({ source, destination, origin, places = [] 
       .addTo(map)
       .bindPopup('<div class="custom-popup"><span style="color:#dc2626;font-weight:700;text-transform:uppercase;font-size:11px;">Destination Arrival</span><br><b style="font-size:14px;color:#1e293b;">${destName}</b></div>');
 
-    // 3. Curved or Dashed Polyline Route Connecting Source and Destination
-    const route = L.polyline([sCoords, dCoords], {
+    // 3. Curved Flight Arc — compute elevated midpoint for bezier-like arc
+    const midLat = (sCoords[0] + dCoords[0]) / 2;
+    const midLng = (sCoords[1] + dCoords[1]) / 2;
+    const dist = Math.sqrt(
+      Math.pow(dCoords[0] - sCoords[0], 2) + Math.pow(dCoords[1] - sCoords[1], 2)
+    );
+    const lift = dist * 0.28; // arc height scales with distance
+
+    // Perpendicular direction for lift
+    const dx = dCoords[1] - sCoords[1];
+    const dy = dCoords[0] - sCoords[0];
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const arcMid = [midLat + (lift * (-dx / len)), midLng + (lift * (dy / len))];
+
+    // Build 32-point smooth curve via linear interpolation through arc midpoint
+    const arcPoints = [];
+    const steps = 32;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const mt = 1 - t;
+      // Quadratic bezier: P = (1-t)^2 * P0 + 2*(1-t)*t * P1 + t^2 * P2
+      const lat = mt*mt*sCoords[0] + 2*mt*t*arcMid[0] + t*t*dCoords[0];
+      const lng = mt*mt*sCoords[1] + 2*mt*t*arcMid[1] + t*t*dCoords[1];
+      arcPoints.push([lat, lng]);
+    }
+
+    const route = L.polyline(arcPoints, {
       color: '#2563EB',
-      weight: 4,
-      dashArray: '8, 10',
-      opacity: 0.85
+      weight: 3,
+      dashArray: '10, 8',
+      opacity: 0.9
     }).addTo(map);
 
     // Initial View / Bounds

@@ -11,8 +11,8 @@ export default function FaqSection() {
       a: "Tripzy is an intelligent travel planning platform that combines destination discovery, travel insights and personalized itinerary generation.",
     },
     {
-      q: "Does Tripzy book my tickets?",
-      a: "No. Tripzy helps you explore travel options and redirects you to the respective official booking platform to complete your booking.",
+      q: "Does Tripzee book my tickets?",
+      a: "No. Tripzee is a planning and comparison tool only. We generate AI-powered itineraries and show predicted flight fares — but we do not sell tickets, handle payments, or make bookings of any kind.",
     },
     {
       q: "Are the predicted prices exact?",

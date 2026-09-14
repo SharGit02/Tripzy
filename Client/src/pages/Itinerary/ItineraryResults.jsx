@@ -9,7 +9,6 @@ import {
   Share2,
   CalendarPlus,
   Pencil,
-  Ticket,
   Sunrise,
   Utensils,
   MapPin,
@@ -114,11 +113,28 @@ function resolveAirportCity(cityName, fallback = "Delhi") {
 
 function getAirlineImage(airline) {
   const a = (airline || "").toLowerCase();
-  if (a.includes("indigo")) return "/indigo.jpeg";
-  if (a.includes("air india") || a.includes("vistara")) return "/airindia.jpeg";
-  if (a.includes("spice")) return "/spicejet.jpeg";
-  if (a.includes("akasa") || a.includes("alaska") || a.includes("star") || a.includes("trujet") || a.includes("flybig")) return "/alaskaair.jpeg";
-  return "/indigo.jpeg";
+  if (a.includes("indigo")) return "/flight-planes-image/indigo.jpeg";
+  if (a.includes("air india") || a.includes("vistara")) return "/flight-planes-image/airindia.jpeg";
+  if (a.includes("spice")) return "/flight-planes-image/spicejet.jpeg";
+  if (a.includes("akasa") || a.includes("alaska") || a.includes("star") || a.includes("trujet") || a.includes("flybig")) return "/flight-planes-image/alaskaair.jpeg";
+  return "/flight-planes-image/indigo.jpeg";
+}
+
+function getAirlineLogo(airline) {
+  const a = (airline || "").toLowerCase();
+  if (a.includes("indigo")) return "/flights-brand-name-svg/IndiGo-Logo-1.svg";
+  if (a.includes("air india") || a.includes("vistara")) return "/flights-brand-name-svg/Air-India-Logo-3.svg";
+  if (a.includes("spice")) return "/flights-brand-name-svg/SpiceJet-Logo-SVG_005.svg";
+  if (a.includes("akasa") || a.includes("alaska") || a.includes("star") || a.includes("trujet") || a.includes("flybig")) return "/flights-brand-name-svg/Alaska-Airlines-Logo.svg";
+  return "/flights-brand-name-svg/IndiGo-Logo-1.svg";
+}
+
+function getAirlineAccent(airline) {
+  const a = (airline || "").toLowerCase();
+  if (a.includes("indigo")) return { from: "#1a237e", to: "#283593" };
+  if (a.includes("air india") || a.includes("vistara")) return { from: "#8b0000", to: "#b71c1c" };
+  if (a.includes("spice")) return { from: "#b71c1c", to: "#c62828" };
+  return { from: "#1565c0", to: "#1976d2" };
 }
 
 function getFallbackFlights(origin, destination, dateStr) {
@@ -271,62 +287,95 @@ function FlightPredictions({ itinerary, source }) {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-3">
         {flights.map((flight, index) => {
           const airlineImg = getAirlineImage(flight.airline);
+          const airlineLogo = getAirlineLogo(flight.airline);
+          const accent = getAirlineAccent(flight.airline);
           const isBest = index === 0;
 
           return (
             <div
               key={index}
-              className={`relative rounded-2xl border ${
-                isBest ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"
-              } overflow-hidden flex flex-row bg-white shadow-sm hover:shadow-md transition-all duration-200`}
+              className={`relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 ${
+                isBest ? "ring-2 ring-blue-400 ring-offset-2" : "border border-slate-200"
+              }`}
             >
+              {/* Best fare badge */}
               {isBest && (
-                <div className="absolute top-2 right-2 z-10">
-                  <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                    Best Fare
+                <div className="absolute top-3 left-3 z-20">
+                  <span className="bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md tracking-wide">
+                    ✦ BEST FARE
                   </span>
                 </div>
               )}
 
-              {/* Left Side: Flight Image */}
-              <div className="w-2/5 min-w-[120px] max-w-[140px] bg-slate-50 p-2 flex flex-col items-center justify-center border-r border-slate-100">
+              {/* Hero: Plane photo — cropped to landscape banner */}
+              <div className="relative h-40 overflow-hidden">
                 <img
                   src={airlineImg}
-                  alt={flight.airline}
-                  className="w-full h-24 object-contain rounded-lg"
+                  alt={`${flight.airline} aircraft`}
+                  className="w-full h-full object-cover object-center"
+                  style={{ objectPosition: "center 60%" }}
                 />
-                <span className="text-[11px] font-bold text-slate-600 mt-1.5 text-center">
-                  {flight.airline}
-                </span>
-              </div>
+                {/* Gradient overlay so bottom text is readable */}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: `linear-gradient(to top, ${accent.from}ee 0%, ${accent.from}55 50%, transparent 100%)`
+                  }}
+                />
 
-              {/* Right Side: Flight Info */}
-              <div className="w-3/5 p-3.5 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-                    <span className="text-slate-800">{flight.origin}</span>
-                    <span>&rarr;</span>
-                    <span className="text-slate-800">{flight.destination}</span>
-                  </div>
-
-                  <p className="text-xs font-semibold text-slate-700 mt-0.5">
-                    Flight #{flight.flightNumber}
-                  </p>
-
-                  <div className="mt-1.5 inline-block bg-slate-100 text-slate-600 text-[10px] font-medium px-2 py-0.5 rounded">
-                    {flight.date} {flight.dayOfWeek ? `(${flight.dayOfWeek})` : ""}
+                {/* Brand SVG logo — pinned bottom-left over gradient */}
+                <div className="absolute bottom-2.5 left-3 z-10">
+                  <div className="bg-white/95 backdrop-blur-sm rounded-lg px-2.5 py-1.5 shadow-sm flex items-center justify-center" style={{ minWidth: 72, maxWidth: 110, height: 36 }}>
+                    <img
+                      src={airlineLogo}
+                      alt={flight.airline}
+                      className="max-h-full max-w-full object-contain"
+                    />
                   </div>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-slate-100">
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-                    Predicted Fare
+                {/* Flight number — pinned bottom-right */}
+                <div className="absolute bottom-3 right-3 z-10">
+                  <span
+                    className="text-white text-[11px] font-bold tracking-wider px-2 py-0.5 rounded"
+                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
+                  >
+                    {flight.flightNumber}
+                  </span>
+                </div>
+              </div>
+
+              {/* Details panel */}
+              <div className="px-4 pt-3 pb-4">
+                {/* Route */}
+                <div className="flex items-center gap-1.5 text-sm font-bold text-slate-800 mb-1">
+                  <span>{flight.origin}</span>
+                  <span className="text-[#2563EB] text-base">✈</span>
+                  <span>{flight.destination}</span>
+                </div>
+
+                {/* Date */}
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {flight.date}{flight.dayOfWeek ? ` · ${flight.dayOfWeek}` : ""}
+                </p>
+
+                {/* Divider */}
+                <div className="my-3 border-t border-dashed border-slate-200" />
+
+                {/* Fare row */}
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Predicted Fare</p>
+                    <p className="text-2xl font-extrabold" style={{ color: accent.from }}>
+                      ₹{Math.round(flight.predictedFare).toLocaleString("en-IN")}
+                    </p>
                   </div>
-                  <div className="text-lg font-extrabold text-[#2563EB]">
-                    ₹{Math.round(flight.predictedFare).toLocaleString("en-IN")}
+                  <div className="text-right">
+                    <p className="text-[10px] text-slate-400 italic">AI estimate</p>
+                    <p className="text-[10px] text-slate-400">fares may vary</p>
                   </div>
                 </div>
               </div>
@@ -467,21 +516,65 @@ export default function ItineraryResults({
         <FlightPredictions itinerary={itinerary} source={sourceCity} />
 
         <h2 className="text-xl font-bold mt-6 mb-3">
-          Budget Breakdown ({formatCurrency(budgetBreakdown?.total)})
+          Budget Estimate
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          {[
-            { key: "accommodation", label: "Stay" },
-            { key: "food", label: "Food" },
-            { key: "transport", label: "Transport" },
-            { key: "activities", label: "Activities" },
-            { key: "miscellaneous", label: "Other" },
-          ].map(({ key, label }) => (
-            <div key={key} className="rounded-xl bg-slate-50 p-4 text-center">
-              <p className="text-2xl font-bold text-[#2563EB]">{formatCurrency(budgetBreakdown?.[key])}</p>
-              <p className="text-sm text-slate-500">{label}</p>
-            </div>
-          ))}
+        {/* ── Digital Receipt ── */}
+        <div
+          style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
+          className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+        >
+          {/* Receipt Header */}
+          <div className="bg-slate-900 text-white px-5 py-4 text-center">
+            <p className="text-xs tracking-[0.25em] text-slate-400 uppercase mb-1">Tripzee · Trip Estimate</p>
+            <p className="text-lg font-bold tracking-wider">{itinerary.destination?.toUpperCase()}</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {itinerary.startDate} → {itinerary.endDate} &nbsp;·&nbsp; {itinerary.tripDurationDays || "—"} days
+            </p>
+          </div>
+
+          {/* Line items */}
+          <div className="px-5 pt-4 pb-2">
+            {[
+              { label: "ACCOMMODATION", key: "accommodation", icon: "🏨" },
+              { label: "FOOD & DINING",  key: "food",          icon: "🍽" },
+              { label: "TRANSPORT",      key: "transport",     icon: "✈️" },
+              { label: "ACTIVITIES",     key: "activities",    icon: "🎯" },
+              { label: "MISCELLANEOUS",  key: "miscellaneous", icon: "📦" },
+            ].map(({ label, key, icon }, idx, arr) => (
+              <div key={key}>
+                <div className="flex items-center justify-between py-2.5 text-sm">
+                  <span className="text-slate-500 flex items-center gap-2">
+                    <span>{icon}</span>
+                    <span>{label}</span>
+                  </span>
+                  <span className="text-slate-800 font-medium tabular-nums">
+                    {formatCurrency(budgetBreakdown?.[key] ?? 0)}
+                  </span>
+                </div>
+                {/* Dotted separator except after last item */}
+                {idx < arr.length - 1 && (
+                  <div
+                    className="border-t border-dashed border-slate-200"
+                    style={{ borderSpacing: '8px 0', letterSpacing: '3px' }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Total row */}
+          <div className="mx-4 mb-4 mt-1 rounded-xl bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+            <span className="text-xs tracking-[0.2em] text-slate-400 uppercase">TOTAL ESTIMATE</span>
+            <span className="text-base font-bold tabular-nums">{formatCurrency(budgetBreakdown?.total)}</span>
+          </div>
+
+          {/* Footer note */}
+          <p
+            className="text-center text-slate-400 text-xs pb-4 px-4"
+            style={{ fontFamily: '"Roboto Mono", monospace' }}
+          >
+            * Estimates based on AI-generated planning data. Actual costs may vary.
+          </p>
         </div>
 
 
@@ -708,16 +801,6 @@ export default function ItineraryResults({
             <Share2 size={18} /> Copy share link
           </button>
         )}
-        {onBook && (
-          <button
-            type="button"
-            onClick={onBook}
-            disabled={bookingBusy || booked}
-            className="flex-1 min-w-[160px] rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold py-3 transition-colors flex items-center justify-center gap-2"
-          >
-            <Ticket size={18} /> {booked ? "Booked" : bookingBusy ? "Booking..." : "Book this plan"}
-          </button>
-        )}
         {onRegenerate && (
           <button
             type="button"
@@ -752,10 +835,10 @@ function BookingLinks({ origin, destination, startDate, endDate, adults }) {
   const groups = getBookingPlatforms({ origin, destination, startDate, endDate, adults });
 
   return (
-    <div id="book-your-trip" className="mt-8 mb-2">
-      <h2 className="text-xl font-bold mb-1">Book Your Trip</h2>
+    <div id="explore-prices" className="mt-8 mb-2">
+      <h2 className="text-xl font-bold mb-1">Explore &amp; Compare Prices</h2>
       <p className="text-sm text-slate-500 mb-4">
-        Opens the official site with this trip's cities and dates filled in where the site allows it. Tripzy does not handle payments.
+        Opens the official site with this trip's cities and dates pre-filled. Tripzee does not sell tickets or handle payments.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         {groups.map((group) => (
