@@ -9,6 +9,7 @@ import ItineraryDetailPage from "./pages/Itinerary/ItineraryDetailPage";
 import ShareItineraryPage from "./pages/Itinerary/ShareItineraryPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import GeneratingItineraryPage from "./pages/Itinerary/GeneratingItineraryPage";
+import NotFoundPage from "./pages/NotFound/NotFoundPage";
 import "./styles/index.css";
 
 export default function App() {
@@ -93,6 +94,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   );
