@@ -328,13 +328,11 @@ function FlightPredictions({ itinerary, source }) {
 
                 {/* Brand SVG logo — pinned bottom-left over gradient */}
                 <div className="absolute bottom-2.5 left-3 z-10">
-                  <div className="bg-white/95 backdrop-blur-sm rounded-lg px-2.5 py-1.5 shadow-sm flex items-center justify-center" style={{ minWidth: 72, maxWidth: 110, height: 36 }}>
                     <img
                       src={airlineLogo}
                       alt={flight.airline}
                       className="max-h-full max-w-full object-contain"
                     />
-                  </div>
                 </div>
 
                 {/* Flight number — pinned bottom-right */}
@@ -343,7 +341,7 @@ function FlightPredictions({ itinerary, source }) {
                     className="text-white text-[11px] font-bold tracking-wider px-2 py-0.5 rounded"
                     style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
                   >
-                    {flight.flightNumber}
+                    Flight: {flight.flightNumber}
                   </span>
                 </div>
               </div>
@@ -490,7 +488,8 @@ export default function ItineraryResults({
     "Delhi";
 
   return (
-    <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-8 mb-8">
+    
+    <div className="rounded-sm bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-200 p-8 mb-8">
       <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-extrabold">{itinerary.destination} Itinerary</h1>
@@ -519,62 +518,57 @@ export default function ItineraryResults({
           Budget Estimate
         </h2>
         {/* ── Digital Receipt ── */}
-        <div
-          style={{ fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-          className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
-        >
-          {/* Receipt Header */}
-          <div className="bg-slate-900 text-white px-5 py-4 text-center">
-            <p className="text-xs tracking-[0.25em] text-slate-400 uppercase mb-1">Tripzee · Trip Estimate</p>
-            <p className="text-lg font-bold tracking-wider">{itinerary.destination?.toUpperCase()}</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {itinerary.startDate} → {itinerary.endDate} &nbsp;·&nbsp; {itinerary.tripDurationDays || "—"} days
-            </p>
-          </div>
-
-          {/* Line items */}
-          <div className="px-5 pt-4 pb-2">
-            {[
-              { label: "ACCOMMODATION", key: "accommodation", icon: "🏨" },
-              { label: "FOOD & DINING",  key: "food",          icon: "🍽" },
-              { label: "TRANSPORT",      key: "transport",     icon: "✈️" },
-              { label: "ACTIVITIES",     key: "activities",    icon: "🎯" },
-              { label: "MISCELLANEOUS",  key: "miscellaneous", icon: "📦" },
-            ].map(({ label, key, icon }, idx, arr) => (
-              <div key={key}>
-                <div className="flex items-center justify-between py-2.5 text-sm">
-                  <span className="text-slate-500 flex items-center gap-2">
-                    <span>{icon}</span>
-                    <span>{label}</span>
-                  </span>
-                  <span className="text-slate-800 font-medium tabular-nums">
-                    {formatCurrency(budgetBreakdown?.[key] ?? 0)}
-                  </span>
-                </div>
-                {/* Dotted separator except after last item */}
-                {idx < arr.length - 1 && (
-                  <div
-                    className="border-t border-dashed border-slate-200"
-                    style={{ borderSpacing: '8px 0', letterSpacing: '3px' }}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Total row */}
-          <div className="mx-4 mb-4 mt-1 rounded-xl bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
-            <span className="text-xs tracking-[0.2em] text-slate-400 uppercase">TOTAL ESTIMATE</span>
-            <span className="text-base font-bold tabular-nums">{formatCurrency(budgetBreakdown?.total)}</span>
-          </div>
-
-          {/* Footer note */}
-          <p
-            className="text-center text-slate-400 text-xs pb-4 px-4"
-            style={{ fontFamily: '"Roboto Mono", monospace' }}
+        {/* ── Digital Receipt ── */}
+        <div className="flex justify-center mb-10 mt-6">
+          <div
+            style={{ backgroundColor: "#f9f7f1", fontFamily: '"Roboto Mono", "Courier New", monospace' }}
+            className="w-full max-w-[400px] shadow-xl p-8 text-[#1a1a1a] relative"
           >
-            * Estimates based on AI-generated planning data. Actual costs may vary.
-          </p>
+            {/* Top jagged edge effect (optional but nice for receipt, using CSS mask or simple border) */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'top -5px left 0' }}></div>
+            
+            <h3 className="text-center text-4xl font-black uppercase tracking-tighter mb-8" style={{ fontFamily: 'Inter, sans-serif' }}>
+              Estimate
+            </h3>
+
+            <div className="text-xs font-bold mb-4 tracking-widest text-slate-500">
+              TRIP BREAKDOWN
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { label: "ACCOMMODATION", key: "accommodation" },
+                { label: "FOOD & DINING",  key: "food" },
+                { label: "TRANSPORT",      key: "transport" },
+                { label: "ACTIVITIES",     key: "activities" },
+                { label: "MISCELLANEOUS",  key: "miscellaneous" },
+              ].map(({ label, key }) => {
+                const value = budgetBreakdown?.[key] ?? 0;
+                if (value === 0) return null; // Don't show 0 value items if we want cleaner look, but up to us.
+                return (
+                  <div key={key} className="flex items-end text-sm">
+                    <span className="shrink-0 font-medium">{label}</span>
+                    <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50"></span>
+                    <span className="shrink-0 font-bold tabular-nums">
+                      {formatCurrency(value)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 pt-4 border-t-2 border-slate-800 flex justify-between items-end">
+              <span className="font-bold uppercase tracking-wider text-sm">Total Estimate</span>
+              <span className="text-xl font-bold tabular-nums">{formatCurrency(budgetBreakdown?.total)}</span>
+            </div>
+
+            <div className="mt-12 flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+              <span>@TRIPZEE</span>
+              <span>{itinerary.totalDays} DAYS</span>
+            </div>
+            
+             <div className="absolute bottom-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'bottom -5px left 0', transform: 'rotate(180deg)' }}></div>
+          </div>
         </div>
 
 
