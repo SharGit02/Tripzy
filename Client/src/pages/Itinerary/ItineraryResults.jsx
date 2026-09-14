@@ -752,7 +752,7 @@ function BookingLinks({ origin, destination, startDate, endDate, adults }) {
   const groups = getBookingPlatforms({ origin, destination, startDate, endDate, adults });
 
   return (
-    <div className="mt-8 mb-2">
+    <div id="book-your-trip" className="mt-8 mb-2">
       <h2 className="text-xl font-bold mb-1">Book Your Trip</h2>
       <p className="text-sm text-slate-500 mb-4">
         Opens the official site with this trip's cities and dates filled in where the site allows it. Tripzy does not handle payments.

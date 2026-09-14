@@ -9,6 +9,7 @@ import ItineraryDetailPage from "./pages/Itinerary/ItineraryDetailPage";
 import ShareItineraryPage from "./pages/Itinerary/ShareItineraryPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import GeneratingItineraryPage from "./pages/Itinerary/GeneratingItineraryPage";
+import TopPickItineraryPage from "./pages/Catalog/TopPickItineraryPage";
 import NotFoundPage from "./pages/NotFound/NotFoundPage";
 import "./styles/index.css";
 
@@ -27,6 +28,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <CatalogPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/plan/pick/:slug"
+          element={
+            <ProtectedRoute>
+              <TopPickItineraryPage />
             </ProtectedRoute>
           }
         />
