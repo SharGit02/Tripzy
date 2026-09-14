@@ -14,7 +14,7 @@ const formatCurrency = (value) => {
 export default function PriceHistoryGraph({ itinerary, sourceCity }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState("1 Month");
+  const [timeRange, setTimeRange] = useState("15 Days");
 
   useEffect(() => {
     async function loadHistory() {
@@ -23,18 +23,27 @@ export default function PriceHistoryGraph({ itinerary, sourceCity }) {
       const rawOrigin = sourceCity || itinerary?.origin || "Delhi";
       const rawDest = itinerary?.destination || "Goa";
       
-      // Determine start date - 15 days
+      let windowDays = 15;
+      let offsetDays = 7;
+      if (timeRange === "30 Days") {
+        windowDays = 30;
+        offsetDays = 15;
+      } else if (timeRange === "90 Days") {
+        windowDays = 90;
+        offsetDays = 45;
+      }
+
+      // Determine start date - offset days
       const baseDate = itinerary?.startDate ? new Date(itinerary.startDate) : new Date();
-      baseDate.setDate(baseDate.getDate() - 15);
+      baseDate.setDate(baseDate.getDate() - offsetDays);
       const startDateStr = baseDate.toISOString().substring(0, 10);
       
       try {
-        // Fetch 30 days (15 before, current, 14 after)
         const response = await fetchFlightFarePrediction({
           origin: rawOrigin,
           destination: rawDest,
           startDate: startDateStr,
-          windowDays: 30,
+          windowDays: windowDays,
         });
 
         const quotes =
@@ -66,18 +75,21 @@ export default function PriceHistoryGraph({ itinerary, sourceCity }) {
           });
           
           setData(chartData);
+        } else {
+          setData([]);
         }
       } catch (err) {
         console.error("Failed to fetch price history:", err);
+        setData([]);
       } finally {
         setLoading(false);
       }
     }
 
     loadHistory();
-  }, [itinerary, sourceCity]);
+  }, [itinerary, sourceCity, timeRange]);
 
-  if (loading) {
+  if (loading && data.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 mb-8 h-[300px] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-[#2563EB]" />
@@ -85,7 +97,7 @@ export default function PriceHistoryGraph({ itinerary, sourceCity }) {
     );
   }
 
-  if (data.length === 0) {
+  if (data.length === 0 && !loading) {
     return null; // Don't show graph if no data
   }
 
@@ -94,7 +106,7 @@ export default function PriceHistoryGraph({ itinerary, sourceCity }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-slate-800">Price History</h2>
         <div className="flex gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100 mt-3 sm:mt-0">
-          {["1 Month", "3 Month", "Max"].map((range) => (
+          {["15 Days", "30 Days", "90 Days"].map((range) => (
             <button
               key={range}
               onClick={() => setTimeRange(range)}

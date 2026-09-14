@@ -9,7 +9,7 @@ class PredictWindowRequest(BaseModel):
     origin: str = Field(min_length=2, max_length=60)
     destination: str = Field(min_length=2, max_length=60)
     start_date: date
-    window_days: int = Field(default=30, ge=1, le=60)
+    window_days: int = Field(default=30, ge=1, le=90)
 
     @field_validator("origin", "destination")
     @classmethod
