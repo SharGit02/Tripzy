@@ -36,7 +36,7 @@ export default function UserNavbar() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutGrid },
     { name: "Plan", path: "/plan", icon: Map },
-    { name: "My Plans", path: "/bookings", icon: Calendar },
+    { name: "My Itinaries", path: "/bookings", icon: Calendar },
   ];
 
   const isNavActive = (path) => {

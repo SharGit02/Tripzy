@@ -152,40 +152,39 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
   for (let d = 1; d <= total; d++) cells.push(d);
 
   return (
-    <div
-      className="bg-white shadow-2xl border-2 p-3 w-[260px] rounded-lg"
-      style={{ borderColor: PERSIAN_BLUE }}
-    >
-      <div className="flex items-center justify-between mb-2">
+    <div className="w-full select-none">
+      <div className="flex items-center justify-between mb-3 px-1">
         <button
+          type="button"
           onClick={prevMonth}
-          className="p-0.5 hover:bg-gray-100 rounded transition-colors"
+          className="p-1 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
         >
           <ChevronLeft size={16} />
         </button>
-        <span className="font-bold text-xs text-gray-800">
+        <span className="font-bold text-xs text-slate-800">
           {MONTHS[viewMonth]} {viewYear}
         </span>
         <button
+          type="button"
           onClick={nextMonth}
-          className="p-0.5 hover:bg-gray-100 rounded transition-colors"
+          className="p-1 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
         >
           <ChevronRight size={16} />
         </button>
       </div>
 
-      <div className="grid grid-cols-7 mb-1">
+      <div className="grid grid-cols-7 mb-1.5">
         {DAYS.map((d) => (
           <div
             key={d}
-            className="text-center text-[9px] font-bold text-gray-400 py-0.5"
+            className="text-center text-[10px] font-bold text-slate-400 py-0.5"
           >
             {d}
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((day, i) => {
           if (!day) return <div key={`e-${i}`} />;
           const start = isStart(day);
@@ -194,23 +193,24 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
           return (
             <button
               key={day}
+              type="button"
               onMouseEnter={() =>
                 setHovered(new Date(viewYear, viewMonth, day))
               }
               onMouseLeave={() => setHovered(null)}
               onClick={() => handleDayClick(day)}
               className={`
-                relative h-7 w-full text-[11px] font-semibold transition-all flex items-center justify-center
-                ${start || end ? "text-white z-10" : "text-gray-700 hover:text-white"}
+                relative h-8 w-full text-[11px] font-semibold transition-all flex items-center justify-center
+                ${start || end ? "text-white z-10" : "text-gray-700 hover:text-[#1C3F94]"}
                 ${range ? "bg-blue-50" : ""}
               `}
             >
-              {range && <span className="absolute inset-0 bg-blue-100" />}
+              {range && <span className="absolute inset-0 bg-blue-100/70" />}
               <span
                 className={`
-                  relative z-10 flex items-center justify-center h-6 w-6 mx-auto rounded-full transition-all text-[11px]
-                  ${start || end ? "text-white" : "hover:bg-opacity-80"}
-                  ${isToday(day) && !start && !end ? "ring-1 ring-offset-1" : ""}
+                  relative z-10 flex items-center justify-center h-7 w-7 mx-auto rounded-full transition-all text-[11px]
+                  ${start || end ? "text-white font-bold shadow-sm" : "hover:bg-slate-100"}
+                  ${isToday(day) && !start && !end ? "ring-1 ring-blue-400 ring-offset-1" : ""}
                 `}
                 style={{
                   backgroundColor: start || end ? PERSIAN_BLUE : undefined,
@@ -223,7 +223,7 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
         })}
       </div>
 
-      <div className="mt-2 pt-1.5 border-t border-gray-100 text-[10px] font-medium text-gray-400 text-center">
+      <div className="mt-3 pt-2 border-t border-slate-100 text-[11px] font-medium text-slate-500 text-center">
         {selecting === "start"
           ? "Select departure date"
           : "Now select return date"}
@@ -271,7 +271,26 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
   const [specialRequests, setSpecialRequests] = useState("");
 
   const calRef = useRef(null);
+  const calDropdownRef = useRef(null);
   const filterRef = useRef(null);
+
+  // Auto-scroll down so the calendar is comfortably in the user's POV when opened
+  useEffect(() => {
+    if (showCal) {
+      const timer = setTimeout(() => {
+        if (calDropdownRef.current) {
+          const rect = calDropdownRef.current.getBoundingClientRect();
+          const vh = window.innerHeight || document.documentElement.clientHeight;
+          if (rect.bottom > vh - 20) {
+            window.scrollBy({ top: rect.bottom - vh + 60, behavior: "smooth" });
+          } else {
+            window.scrollBy({ top: 120, behavior: "smooth" });
+          }
+        }
+      }, 70);
+      return () => clearTimeout(timer);
+    }
+  }, [showCal]);
 
   // Close calendar or filters on outside click
   useEffect(() => {
@@ -481,7 +500,12 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
             <div ref={calRef} className="relative min-w-0 border-b md:border-r border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowCal((p) => !p)}
+                onClick={() => {
+                  setShowCal((p) => !p);
+                  setShowFilters(false);
+                  setWhereOpen(false);
+                  setFromOpen(false);
+                }}
                 className="w-full h-full flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors text-left"
               >
                 <Calendar
@@ -531,16 +555,31 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                 </div>
               </button>
 
-              {showCal && (
-                <div className="absolute bottom-full left-0 mb-2 z-50">
-                  <CalendarPicker
-                    startDate={startDate}
-                    endDate={endDate}
-                    onSelect={handleDateSelect}
-                    onClose={() => setShowCal(false)}
-                  />
-                </div>
-              )}
+              {/* ── Duration Calendar Dropdown ── */}
+              <AnimatePresence>
+                {showCal && (
+                  <motion.div
+                    ref={calDropdownRef}
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className="absolute top-full left-0 mt-3 z-50 bg-white rounded-2xl p-4 shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-200 text-left w-[290px] sm:w-[310px]"
+                  >
+                    {/* Pointer Arrow */}
+                    <div className="absolute -top-2 left-8 w-4 h-4 bg-white border-t border-l border-slate-200 rotate-45 z-20" />
+
+                    <div className="relative z-10">
+                      <CalendarPicker
+                        startDate={startDate}
+                        endDate={endDate}
+                        onSelect={handleDateSelect}
+                        onClose={() => setShowCal(false)}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* BUDGET */}
