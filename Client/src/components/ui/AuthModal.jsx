@@ -4,10 +4,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, Lock, Eye, EyeOff, User, ChevronRight } from "lucide-react";
 import authBg from "../../assets/images/auth-bg.png";
 import logoImg from "../../assets/images/logo.png";
-import mountainMark from "../../pages/Auth/tripzy_blue_mountain_transparent.svg";
+import mountainMark from "./tripzy_blue_mountain_transparent.svg";
 import { loginUser, signupUser } from "../../lib/authApi";
 
 export default function AuthModal({ defaultTab = "login", onClose }) {
+  const getOAuthUrl = (provider) => {
+    const baseUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+    return `${baseUrl}/api/auth/${provider}`;
+  };
   const [tab, setTab] = useState(defaultTab);
   const navigate = useNavigate();
 
@@ -150,8 +154,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                       Welcome <span className="text-[#2c497f]">Back!</span>
                     </h1>
                     <p className="text-[#000000] text-base sm:text-lg leading-relaxed max-w-[290px] font-sans-secondary font-bold italic">
-                      Continue your journey across India and explore your saved
-                      itineraries.
+                      Continue your journey across India and explore!
                     </p>
                   </>
                 ) : (
@@ -584,6 +587,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                 ].map((s, i) => (
                   <motion.button
                     key={i}
+                    onClick={() => window.location.href = getOAuthUrl("github")}
                     whileHover={{ scale: 1.1, borderColor: "#14b8a6" }}
                     className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm"
                     style={{ border: "1.5px solid #e2e8f0" }}
@@ -601,6 +605,7 @@ export default function AuthModal({ defaultTab = "login", onClose }) {
                   </motion.button>
                 ))}
                 <motion.button
+                  onClick={() => window.location.href = getOAuthUrl("google")}
                   whileHover={{ scale: 1.1, borderColor: "#14b8a6" }}
                   className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm"
                   style={{ border: "1.5px solid #e2e8f0" }}

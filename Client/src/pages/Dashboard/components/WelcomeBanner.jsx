@@ -16,7 +16,7 @@ export default function WelcomeBanner({ userName }) {
       {/* Text */}
       <div className="relative z-10 p-6 pr-48">
         <h1 className="text-2xl font-extrabold text-[#0f2442] leading-tight">
-          Welcome back,{" "}
+          Lets get started!
           <span className="text-[#2563EB]">{firstName}!</span>{" "}
         </h1>
         <p className="mt-1 text-sm font-medium text-[#386FA4]">
