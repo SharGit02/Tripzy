@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, Navigation, Loader2, Search, Check } from "lucide-react";
-import { CITIES_LIST, useLocationContext } from "../../context/LocationContext";
+import { CITIES_LIST, nearestCity, useLocationContext } from "../../context/LocationContext";
 
 export default function LocationDropdown({ isOpen, setIsOpen, align = "right" }) {
     const { currentCity, setCurrentCity } = useLocationContext();
@@ -19,17 +19,23 @@ export default function LocationDropdown({ isOpen, setIsOpen, align = "right" })
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
+                const { latitude, longitude } = position.coords;
+                const { city, km } = nearestCity(latitude, longitude);
                 setIsDetectingLocation(false);
-                setCurrentCity("Nagpur");
-                setLocationNotice("Location updated successfully!");
-                setTimeout(() => setLocationNotice(""), 2500);
+                setCurrentCity(city);
+                setLocationNotice(
+                    km < 80
+                        ? `Detected ${city} from your GPS.`
+                        : `Closest listed city is ${city} (${km} km away).`,
+                );
+                setTimeout(() => setLocationNotice(""), 3500);
             },
             (error) => {
                 setIsDetectingLocation(false);
                 setLocationNotice("Permission denied or location unavailable.");
                 setTimeout(() => setLocationNotice(""), 2500);
             },
-            { timeout: 10000 }
+            { timeout: 12000, enableHighAccuracy: true, maximumAge: 0 }
         );
     };
 

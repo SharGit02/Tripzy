@@ -3,7 +3,7 @@ import { Luggage, MapPin, Map, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import adventureImg from "../../../assets/images/Ladakh.png";
 
-export default function JourneyStats({ trips = 0, places = 0, itineraries = 2 }) {
+export default function JourneyStats({ trips = 0, places = 0, itineraries = 0 }) {
     const stats = [
         { icon: Luggage, value: String(trips).padStart(2, "0"), label: "Trips", sub: "Keep exploring!" },
         { icon: MapPin, value: String(places).padStart(2, "0"), label: "Places", sub: "Destinations visited" },

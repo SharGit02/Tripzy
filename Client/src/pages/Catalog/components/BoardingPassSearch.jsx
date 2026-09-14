@@ -36,7 +36,7 @@ import {
   Accessibility,
   ChevronDown,
 } from "lucide-react";
-import { useLocationContext } from "../../../context/LocationContext";
+import { CITIES_LIST, useLocationContext } from "../../../context/LocationContext";
 import LocationDropdown from "../../../components/layout/LocationDropdown";
 
 // ── Persian Blue Color Token ──
@@ -237,7 +237,6 @@ const fmt = (d) =>
     ? d.toLocaleDateString("en-IN", {
       day: "numeric",
       month: "short",
-      year: "numeric",
     })
     : null;
 
@@ -249,6 +248,8 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
   const fromRef = useRef(null);
 
   const [whereTo, setWhereTo] = useState(() => searchParams.get("q") || "");
+  const [whereOpen, setWhereOpen] = useState(false);
+  const whereRef = useRef(null);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [budget, setBudget] = useState("");
@@ -281,6 +282,8 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
         setShowFilters(false);
       if (fromRef.current && !fromRef.current.contains(e.target))
         setFromOpen(false);
+      if (whereRef.current && !whereRef.current.contains(e.target))
+        setWhereOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -350,6 +353,12 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
         ? `${fmt(startDate)} – ?`
         : null;
 
+  const destinationSuggestions = CITIES_LIST.filter((city) => {
+    const query = whereTo.trim().toLowerCase();
+    if (!query) return city.toLowerCase() !== currentCity.toLowerCase();
+    return city.toLowerCase().includes(query);
+  }).slice(0, 8);
+
   return (
     <div className="w-full relative z-30">
       {/* ── Flight Ticket / Boarding Pass ── */}
@@ -374,35 +383,33 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
         {/* ── Ticket Main Body ── */}
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Fields */}
-          <div className="flex flex-col sm:flex-row">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(160px,1.15fr)_minmax(160px,1.2fr)_minmax(180px,1.35fr)_minmax(110px,0.85fr)_minmax(130px,1fr)]">
             {/* FROM */}
-            <div ref={fromRef} className="relative w-full sm:flex-[2.1] min-w-0 border-b sm:border-b-0 sm:border-r border-slate-100">
-              <div
-                className="w-full h-full flex items-start gap-4 px-6 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors"
-              >
+            <div ref={fromRef} className="relative min-w-0 border-b md:border-r border-slate-100">
+              <div className="w-full h-full flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors">
                 <MapPin
                   size={18}
                   className="flex-shrink-0 mt-1"
                   style={{ color: PERSIAN_BLUE }}
                 />
-                <div className="min-w-0 flex-1 overflow-hidden select-none">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap mb-1">
+                <div className="min-w-0 flex-1 select-none">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
                     From
                   </p>
                   <button
                     type="button"
                     onClick={() => setFromOpen((prev) => !prev)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 transition-all text-xs font-bold text-slate-800"
+                    className="flex flex-wrap items-center gap-1.5 max-w-full rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 transition-all px-2.5 py-1.5"
                   >
-                    <span className="truncate max-w-[140px] sm:max-w-[180px]">
+                    <span className="text-xs font-bold text-slate-800">
                       {currentCity}
                     </span>
-                    <span className="text-[9px] font-extrabold uppercase text-[#9FADB6] bg-blue-100/80 px-1.5 py-0.5 rounded-md tracking-wider">
+                    <span className="text-[8px] font-extrabold uppercase text-[#1C3F94] bg-blue-100/80 px-1.5 py-0.5 rounded-md tracking-wider shrink-0">
                       CURRENT
                     </span>
-                    <ChevronDown size={12} className={`text-slate-400 transition-transform duration-200 ${fromOpen ? 'rotate-180 text-[#2563EB]' : ''}`} />
+                    <ChevronDown size={12} className={`text-slate-400 shrink-0 transition-transform duration-200 ${fromOpen ? "rotate-180 text-[#2563EB]" : ""}`} />
                   </button>
-                  <p className="text-[11px] text-gray-400 mt-1 whitespace-nowrap">
+                  <p className="text-[11px] text-gray-400 mt-1">
                     Change departure
                   </p>
                 </div>
@@ -411,49 +418,85 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
             </div>
 
             {/* WHERE TO */}
-            <div className="w-full sm:flex-[2.2] min-w-0 flex items-center gap-4 px-6 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors">
-              <MapPin
-                size={18}
-                className="flex-shrink-0"
-                style={{ color: PERSIAN_BLUE }}
-              />
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap">
-                  Where
-                </p>
-                <input
-                  type="text"
-                  value={whereTo}
-                  onChange={(e) => setWhereTo(e.target.value)}
-                  placeholder="Destination"
-                  className="block w-full text-sm font-bold text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-500 placeholder:font-medium mt-0.5 truncate"
+            <div ref={whereRef} className="relative min-w-0 border-b xl:border-r border-slate-100">
+              <div className="w-full h-full flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors">
+                <MapPin
+                  size={18}
+                  className="flex-shrink-0 mt-1"
+                  style={{ color: PERSIAN_BLUE }}
                 />
-                <p className="text-[11px] text-gray-400 mt-0.5 whitespace-nowrap">
-                  Enter destination
-                </p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    Where
+                  </p>
+                  <input
+                    type="text"
+                    value={whereTo}
+                    onFocus={() => setWhereOpen(true)}
+                    onChange={(e) => {
+                      setWhereTo(e.target.value);
+                      setWhereOpen(true);
+                    }}
+                    placeholder="Destination"
+                    autoComplete="off"
+                    className="block w-full text-sm font-bold text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-500 placeholder:font-medium mt-0.5"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    Enter destination
+                  </p>
+                </div>
               </div>
+              {whereOpen && (
+                <div className="absolute left-3 right-3 top-full mt-2 z-50 bg-white rounded-2xl p-3 shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-200 text-left">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 px-1">
+                    Major cities
+                  </p>
+                  <div className="max-h-52 overflow-y-auto space-y-1">
+                    {destinationSuggestions.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-3">
+                        No matching cities. You can still type a custom destination.
+                      </p>
+                    ) : (
+                      destinationSuggestions.map((city) => (
+                        <button
+                          key={city}
+                          type="button"
+                          onClick={() => {
+                            setWhereTo(city);
+                            setWhereOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-[#2563EB] transition-all"
+                        >
+                          <MapPin size={13} className="text-slate-400 shrink-0" />
+                          {city}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* DURATION */}
-            <div ref={calRef} className="relative w-full sm:flex-[2.2] min-w-0">
+            <div ref={calRef} className="relative min-w-0 border-b md:border-r border-slate-100">
               <button
                 type="button"
                 onClick={() => setShowCal((p) => !p)}
-                className="w-full h-full flex items-center gap-4 px-6 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors text-left"
+                className="w-full h-full flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors text-left"
               >
                 <Calendar
                   size={18}
-                  className="flex-shrink-0"
+                  className="flex-shrink-0 mt-1"
                   style={{ color: PERSIAN_BLUE }}
                 />
-                <div className="min-w-0 flex-1 overflow-hidden">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Duration
                   </p>
                   {dateLabel ? (
-                    <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                    <div className="flex items-start gap-1 mt-0.5">
                       <p
-                        className="text-sm font-bold truncate"
+                        className="text-sm font-bold leading-snug"
                         style={{ color: PERSIAN_BLUE }}
                       >
                         {dateLabel}
@@ -468,17 +511,17 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                             clearDates(e);
                           }
                         }}
-                        className="flex-shrink-0 hover:text-red-500 text-gray-400 transition-colors ml-1"
+                        className="flex-shrink-0 hover:text-red-500 text-gray-400 transition-colors mt-0.5"
                       >
                         <X size={12} />
                       </span>
                     </div>
                   ) : (
-                    <p className="text-sm font-bold text-gray-700 mt-0.5 whitespace-nowrap">
+                    <p className="text-sm font-bold text-gray-700 mt-0.5">
                       Add dates
                     </p>
                   )}
-                  <p className="text-[11px] text-gray-400 mt-0.5 whitespace-nowrap">
+                  <p className="text-[11px] text-gray-400 mt-0.5">
                     {startDate && endDate
                       ? `${Math.round((endDate - startDate) / 86400000)} nights`
                       : startDate
@@ -501,14 +544,14 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
             </div>
 
             {/* BUDGET */}
-            <div className="w-full sm:flex-[1.8] min-w-0 flex items-center gap-4 px-6 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors">
+            <div className="min-w-0 border-b xl:border-r border-slate-100 flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors">
               <IndianRupee
                 size={18}
-                className="flex-shrink-0"
+                className="flex-shrink-0 mt-1"
                 style={{ color: PERSIAN_BLUE }}
               />
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
                   Budget
                 </p>
                 <div className="flex items-center gap-2 mt-0.5">
@@ -517,13 +560,10 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                     value={budget}
                     onChange={(e) => setBudget(e.target.value)}
                     placeholder="Amount"
-                    className="block w-full min-w-0 text-sm font-bold text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-500 placeholder:font-medium truncate [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="block w-full min-w-0 text-sm font-bold text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-500 placeholder:font-medium [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  {/* <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md bg-slate-100 text-slate-400">
-                    <ChevronsUpDown size={12} />
-                  </span> */}
                 </div>
-                <p className="text-[11px] text-gray-400 mt-0.5 whitespace-nowrap">
+                <p className="text-[11px] text-gray-400 mt-0.5">
                   Enter budget (₹)
                 </p>
               </div>
@@ -532,26 +572,26 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
             {/* MORE FILTERS TRIGGER (Clicking ANYWHERE in box/icon/label/text opens drawer) */}
             <div
               ref={filterRef}
-              className="relative w-full sm:flex-[1.9] min-w-0"
+              className="relative min-w-0"
             >
               <button
                 type="button"
                 onClick={() => setShowFilters((p) => !p)}
-                className="w-full h-full flex items-center gap-3 px-5 sm:px-7 py-5 hover:bg-blue-50/40 transition-colors text-left cursor-pointer group"
+                className="w-full h-full flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors text-left cursor-pointer group"
               >
                 <SlidersHorizontal
                   size={18}
-                  className="flex-shrink-0 transition-transform group-hover:scale-110"
+                  className="flex-shrink-0 mt-1 transition-transform group-hover:scale-110"
                   style={{ color: PERSIAN_BLUE }}
                 />
-                <div className="min-w-0 flex-1 overflow-hidden">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 whitespace-nowrap">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Filters
                   </p>
                   <p className="text-[13px] leading-tight font-bold text-gray-800 group-hover:text-[#1C3F94] transition-colors mt-0.5">
-                    More filter
+                    More filters
                   </p>
-                  <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                  <p className="text-[11px] text-gray-400 mt-0.5">
                     Customize trip
                   </p>
                 </div>

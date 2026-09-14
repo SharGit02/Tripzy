@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Calendar, MapPin, Users, Loader2, X, Ticket } from "lucide-react";
+import { Calendar, MapPin, Users, Loader2, X, Ticket, Map } from "lucide-react";
 import UserNavbar from "../../components/layout/UserNavbar";
 import Footer from "../../components/layout/Footer";
-import { fetchBookings, deleteBooking, fetchFlightFareHistory } from "../../lib/authApi";
+import { fetchBookings, deleteBooking, fetchFlightFareHistory, fetchItineraries } from "../../lib/authApi";
 import FareHistoryList from "./components/FareHistoryList";
 
 const STATUS_STYLES = {
@@ -28,6 +29,8 @@ export default function MyBookingsPage() {
 
   const [fareHistory, setFareHistory] = useState([]);
   const [fareHistoryLoading, setFareHistoryLoading] = useState(true);
+  const [itineraries, setItineraries] = useState([]);
+  const [itinerariesLoading, setItinerariesLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -41,6 +44,25 @@ export default function MyBookingsPage() {
       })
       .finally(() => {
         if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchItineraries(50, 0)
+      .then((data) => {
+        if (isMounted) setItineraries(data.itineraries || []);
+      })
+      .catch(() => {
+        if (isMounted) setItineraries([]);
+      })
+      .finally(() => {
+        if (isMounted) setItinerariesLoading(false);
       });
 
     return () => {
@@ -86,7 +108,80 @@ export default function MyBookingsPage() {
         <UserNavbar />
         <main className="pt-28 px-6 pb-16 max-w-5xl mx-auto w-full">
           <div className="mb-8">
-            <h1 className="text-3xl font-extrabold mb-2">My Bookings</h1>
+            <h1 className="text-3xl font-extrabold mb-2">My Itineraries</h1>
+            <p className="text-[#386FA4]">Every trip you generate is saved here.</p>
+          </div>
+
+          {error && (
+            <div className="mb-6 px-4 py-2.5 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200">
+              {error}
+            </div>
+          )}
+
+          {itinerariesLoading ? (
+            <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-8 mb-12">
+              <p className="text-sm text-slate-500">Loading your itineraries...</p>
+            </div>
+          ) : itineraries.length === 0 ? (
+            <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-12 text-center mb-12">
+              <Map size={32} className="mx-auto mb-3 text-slate-300" />
+              <p className="text-base font-semibold text-[#0f2442] mb-1">No itineraries yet</p>
+              <p className="text-sm text-slate-500 mb-4">
+                Generate a trip from Plan and it will show up here.
+              </p>
+              <Link
+                to="/plan"
+                className="inline-flex items-center justify-center rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-sm font-semibold px-4 py-2.5"
+              >
+                Plan a trip
+              </Link>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4 mb-12">
+              {itineraries.map((item) => {
+                const startDate = formatDate(item.startDate);
+                const endDate = formatDate(item.endDate);
+                const statusClass = STATUS_STYLES[item.status] || STATUS_STYLES.completed;
+                return (
+                  <Link
+                    key={item.id}
+                    to={`/plan/${item.id}`}
+                    className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between hover:border-blue-200 hover:shadow-md transition-all"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <h2 className="text-lg font-bold text-[#0f2442]">
+                          {item.title || `${item.destination} itinerary`}
+                        </h2>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border capitalize ${statusClass}`}>
+                          {item.status || "ready"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+                        {item.destination && (
+                          <span className="flex items-center gap-1.5">
+                            <MapPin size={14} />
+                            {item.destination}
+                          </span>
+                        )}
+                        {(startDate || endDate) && (
+                          <span className="flex items-center gap-1.5">
+                            <Calendar size={14} />
+                            {startDate}
+                            {endDate ? ` – ${endDate}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold text-[#2563EB]">Open →</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mb-8">
+            <h2 className="text-2xl font-extrabold mb-2">My Bookings</h2>
             <p className="text-[#386FA4]">Everything you've booked, in one place.</p>
           </div>
 

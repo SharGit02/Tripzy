@@ -232,6 +232,10 @@ Make the itinerary practical and geographically sensible.
 }
 
 export const itineraryAI = {
+    /**
+     * FUTURE USE — questionnaire prompts. Called only from
+     * itinerary.questionnaire.future.ts, which is not mounted on HTTP routes.
+     */
     async generateQuestions(
         input: any,
         userId: string

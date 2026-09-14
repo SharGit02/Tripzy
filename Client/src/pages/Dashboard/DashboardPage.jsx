@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
-import { fetchUserProfile, fetchBookings } from "../../lib/authApi";
+import { useEffect, useMemo, useState } from "react";
+import {
+  fetchUserProfile,
+  fetchBookings,
+  fetchItineraries,
+  fetchFlightFareHistory,
+} from "../../lib/authApi";
 import UserNavbar from "../../components/layout/UserNavbar";
+import Footer from "../../components/layout/Footer";
 
-// Dashboard sub-components
 import WelcomeBanner from "./components/WelcomeBanner";
 import TravelCostChart from "./components/TravelCostChart";
 import TravelCostOverview from "./components/TravelCostOverview";
 import WeatherWidget from "./components/WeatherWidget";
 import SeasonalPick from "./components/SeasonalPick";
 import JourneyStats from "./components/JourneyStats";
-import DashboardFooter from "./components/DashboardFooter";
+import { buildTravelCostView, uniqueDestinations } from "./lib/buildTravelCostView";
 
 // Shown until the user saves a home city on their profile, so the weather card
 // always has something real to display instead of an empty state.
@@ -19,25 +24,36 @@ export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [itineraries, setItineraries] = useState([]);
+  const [itineraryCount, setItineraryCount] = useState(0);
+  const [fareHistory, setFareHistory] = useState([]);
+  const [costsLoading, setCostsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
-    // /users/profile returns the user *and* their profile, so it covers both
-    // the greeting and the weather card's home city in a single request.
-    Promise.all([fetchUserProfile(), fetchBookings()])
-      .then(([profileData, bookingsData]) => {
+    Promise.all([
+      fetchUserProfile(),
+      fetchBookings(),
+      fetchItineraries(50, 0).catch(() => ({ total: 0, itineraries: [] })),
+      fetchFlightFareHistory().catch(() => ({ history: [] })),
+    ])
+      .then(([profileData, bookingsData, itineraryData, fareData]) => {
         if (!isMounted) return;
         setUser(profileData.user);
         setProfile(profileData.profile);
         setBookings(bookingsData.bookings || []);
+        const plans = itineraryData.itineraries || [];
+        setItineraries(plans);
+        setItineraryCount(Number(itineraryData.total) || plans.length);
+        setFareHistory(fareData.history || []);
+        setCostsLoading(false);
       })
       .catch((err) => {
-        if (isMounted) setError(err.message || "Unable to load dashboard.");
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setError(err.message || "Unable to load dashboard.");
+          setCostsLoading(false);
+        }
       });
     return () => {
       isMounted = false;
@@ -47,12 +63,11 @@ export default function DashboardPage() {
   const weatherCity = profile?.homeCity?.trim() || DEFAULT_WEATHER_CITY;
 
   // Derived stats
-  const uniquePlaces = new Set(
-    bookings
-      .filter((b) => b.destination)
-      .map((b) => b.destination.toLowerCase()),
-  ).size;
-
+  const uniquePlaces = uniqueDestinations(itineraries, bookings);
+  const costView = useMemo(
+    () => buildTravelCostView({ itineraries, fareHistory, bookings }),
+    [itineraries, fareHistory, bookings],
+  );
   return (
     <div className="min-h-screen bg-[#F7F9FC]">
       <UserNavbar />
@@ -73,8 +88,8 @@ export default function DashboardPage() {
 
             {/* Cost chart + Overview side by side */}
             <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-5">
-              <TravelCostChart />
-              <TravelCostOverview />
+              <TravelCostChart costView={costView} loading={costsLoading} />
+              <TravelCostOverview costView={costView} />
             </div>
           </div>
 
@@ -93,13 +108,13 @@ export default function DashboardPage() {
           <JourneyStats
             trips={bookings.length}
             places={uniquePlaces}
-            itineraries={2}
+            itineraries={itineraryCount}
           />
         </div>
       </main>
 
       {/* ── Footer ── */}
-      <DashboardFooter />
+      <Footer className="mt-5" />
     </div>
   );
 }

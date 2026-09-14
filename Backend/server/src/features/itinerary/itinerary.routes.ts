@@ -6,10 +6,6 @@ const router = Router();
 
 router.use(authMiddleware);
 
-// Mounted at /api/plan (and aliased at /api/itinerary).
-
-router.post("/questions", ctrl.getQuestions);
-router.post("/:itineraryId/answers", ctrl.submitAnswer);
 router.post("/generate", ctrl.generateDirectItinerary);
 router.get("/", ctrl.listItineraries);
 router.get("/:id", ctrl.getItinerary);

@@ -1,4 +1,16 @@
-import { Loader2, AlertCircle, CheckCircle, Download, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import {
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  Download,
+  RotateCcw,
+  Share2,
+  CalendarPlus,
+  Pencil,
+  Ticket,
+} from "lucide-react";
+import ItineraryMap from "./ItineraryMap";
 
 function formatDate(dateStr) {
   if (!dateStr) return "";
@@ -13,20 +25,38 @@ const safeNumber = (value) => {
 
 const formatCurrency = (value) => `₹${safeNumber(value).toLocaleString("en-IN")}`;
 
+function emptyActivity() {
+  return { time: "09:00", type: "activity", title: "", description: "", cost: 0 };
+}
+
 export default function ItineraryResults({
   status,
   itinerary,
   error,
+  readOnly = false,
   onDownloadPdf,
   onRegenerate,
   onPlanAnother,
+  onSaveDays,
+  savingDays = false,
+  onShare,
+  shareNotice = "",
+  onBook,
+  bookingBusy = false,
+  booked = false,
+  onExportIcs,
+  loadingTitle = "Creating your itinerary...",
+  loadingSubtitle = "This may take a minute while we plan every detail.",
 }) {
+  const [editingDay, setEditingDay] = useState(null);
+  const [draftActivities, setDraftActivities] = useState([]);
+
   if (status === "loading") {
     return (
       <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-12 text-center max-w-md mx-auto">
         <Loader2 size={48} className="mx-auto mb-4 animate-spin text-[#2563EB]" />
-        <h2 className="text-2xl font-bold mb-2">Creating your itinerary...</h2>
-        <p className="text-slate-500">This may take a minute while we plan every detail.</p>
+        <h2 className="text-2xl font-bold mb-2">{loadingTitle}</h2>
+        <p className="text-slate-500">{loadingSubtitle}</p>
       </div>
     );
   }
@@ -57,6 +87,22 @@ export default function ItineraryResults({
   const days = itinerary.days || [];
   const tips = itinerary.tips || [];
 
+  const startDayEdit = (day) => {
+    setEditingDay(day.day);
+    setDraftActivities((day.activities || []).map((activity) => ({ ...activity })));
+  };
+
+  const saveDayEdit = () => {
+    if (!onSaveDays) return;
+    const nextDays = days.map((day) =>
+      day.day === editingDay
+        ? { ...day, activities: draftActivities.filter((activity) => String(activity.title || "").trim()) }
+        : day,
+    );
+    onSaveDays(nextDays);
+    setEditingDay(null);
+  };
+
   return (
     <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-8 mb-8">
       <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
@@ -74,6 +120,8 @@ export default function ItineraryResults({
       <div className="prose prose-slate max-w-none">
         <h2 className="text-xl font-bold mb-3">Overview</h2>
         <p className="text-slate-600">{itinerary.overview}</p>
+
+        <ItineraryMap destination={itinerary.destination} places={placesToVisit} />
 
         <h2 className="text-xl font-bold mt-6 mb-3">
           Budget Breakdown ({formatCurrency(budgetBreakdown?.total)})
@@ -127,30 +175,134 @@ export default function ItineraryResults({
         <div className="space-y-4">
           {days.map((day) => (
             <div key={day.day} className="rounded-xl border border-slate-200 overflow-hidden">
-              <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
                 <span className="font-semibold text-[#133C55]">
                   Day {day.day} · {formatDate(day.date)}
                 </span>
-                {day.theme && (
-                  <span className="text-sm text-[#2563EB] bg-[#EBF3FE] px-2 py-1 rounded">{day.theme}</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {day.theme && (
+                    <span className="text-sm text-[#2563EB] bg-[#EBF3FE] px-2 py-1 rounded">{day.theme}</span>
+                  )}
+                  {!readOnly && onSaveDays && editingDay !== day.day && (
+                    <button
+                      type="button"
+                      onClick={() => startDayEdit(day)}
+                      className="text-xs font-semibold text-slate-500 hover:text-[#2563EB] inline-flex items-center gap-1"
+                    >
+                      <Pencil size={13} /> Edit
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="p-4 space-y-2">
-                {(day.activities || []).map((activity, i) => (
-                  <div key={i} className="flex items-start gap-3 text-sm">
-                    <span className="w-16 text-slate-500 font-mono">{activity.time}</span>
-                    <span className="rounded px-2 py-0.5 bg-[#EBF3FE] text-[#1D4ED8] text-xs font-medium capitalize">
-                      {activity.type}
-                    </span>
-                    <span className="text-[#133C55]">{activity.title}</span>
-                    {activity.description && <span className="text-slate-500">- {activity.description}</span>}
-                    {activity.cost ? (
-                      <span className="text-[#2563EB] font-semibold ml-auto">
-                        ₹{activity.cost.toLocaleString()}
-                      </span>
-                    ) : null}
+                {editingDay === day.day ? (
+                  <div className="space-y-3">
+                    {draftActivities.map((activity, i) => (
+                      <div key={i} className="grid gap-2 sm:grid-cols-12 items-start">
+                        <input
+                          value={activity.time || ""}
+                          onChange={(e) => {
+                            const next = [...draftActivities];
+                            next[i] = { ...next[i], time: e.target.value };
+                            setDraftActivities(next);
+                          }}
+                          className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                          placeholder="09:00"
+                        />
+                        <input
+                          value={activity.type || ""}
+                          onChange={(e) => {
+                            const next = [...draftActivities];
+                            next[i] = { ...next[i], type: e.target.value };
+                            setDraftActivities(next);
+                          }}
+                          className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                          placeholder="type"
+                        />
+                        <input
+                          value={activity.title || ""}
+                          onChange={(e) => {
+                            const next = [...draftActivities];
+                            next[i] = { ...next[i], title: e.target.value };
+                            setDraftActivities(next);
+                          }}
+                          className="sm:col-span-5 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                          placeholder="Activity title"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          value={activity.cost || ""}
+                          onChange={(e) => {
+                            const next = [...draftActivities];
+                            next[i] = { ...next[i], cost: Number(e.target.value) || 0 };
+                            setDraftActivities(next);
+                          }}
+                          className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                          placeholder="₹"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setDraftActivities(draftActivities.filter((_, idx) => idx !== i))}
+                          className="sm:col-span-1 text-xs text-red-600 font-semibold"
+                        >
+                          Remove
+                        </button>
+                        <textarea
+                          value={activity.description || ""}
+                          onChange={(e) => {
+                            const next = [...draftActivities];
+                            next[i] = { ...next[i], description: e.target.value };
+                            setDraftActivities(next);
+                          }}
+                          className="sm:col-span-12 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                          rows={2}
+                          placeholder="Notes"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDraftActivities([...draftActivities, emptyActivity()])}
+                        className="text-sm font-semibold text-[#2563EB]"
+                      >
+                        Add activity
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveDayEdit}
+                        disabled={savingDays}
+                        className="rounded-lg bg-[#2563EB] text-white text-sm font-semibold px-3 py-1.5 disabled:opacity-60"
+                      >
+                        {savingDays ? "Saving..." : "Save day"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingDay(null)}
+                        className="text-sm font-semibold text-slate-500"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  (day.activities || []).map((activity, i) => (
+                    <div key={i} className="flex items-start gap-3 text-sm">
+                      <span className="w-16 text-slate-500 font-mono">{activity.time}</span>
+                      <span className="rounded px-2 py-0.5 bg-[#EBF3FE] text-[#1D4ED8] text-xs font-medium capitalize">
+                        {activity.type}
+                      </span>
+                      <span className="text-[#133C55]">{activity.title}</span>
+                      {activity.description && <span className="text-slate-500">- {activity.description}</span>}
+                      {activity.cost ? (
+                        <span className="text-[#2563EB] font-semibold ml-auto">
+                          ₹{activity.cost.toLocaleString()}
+                        </span>
+                      ) : null}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           ))}
@@ -165,24 +317,61 @@ export default function ItineraryResults({
             </li>
           ))}
         </ul>
+
+        {/* ── External Booking Links ── */}
+        <BookingLinks destination={itinerary.destination} />
       </div>
 
       <div className="mt-8 flex gap-3 flex-wrap">
-        <button
-          type="button"
-          onClick={onDownloadPdf}
-          className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2"
-        >
-          <Download size={18} /> Download PDF
-        </button>
-        <button
-          type="button"
-          onClick={onRegenerate}
-          className="flex-1 min-w-[160px] rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold py-3 transition-colors flex items-center justify-center gap-2"
-        >
-          <RotateCcw size={18} /> Regenerate
-        </button>
+        {onDownloadPdf && (
+          <button
+            type="button"
+            onClick={onDownloadPdf}
+            className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2"
+          >
+            <Download size={18} /> Download PDF
+          </button>
+        )}
+        {onExportIcs && (
+          <button
+            type="button"
+            onClick={onExportIcs}
+            className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2"
+          >
+            <CalendarPlus size={18} /> Add to calendar
+          </button>
+        )}
+        {onShare && (
+          <button
+            type="button"
+            onClick={onShare}
+            className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2"
+          >
+            <Share2 size={18} /> Copy share link
+          </button>
+        )}
+        {onBook && (
+          <button
+            type="button"
+            onClick={onBook}
+            disabled={bookingBusy || booked}
+            className="flex-1 min-w-[160px] rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold py-3 transition-colors flex items-center justify-center gap-2"
+          >
+            <Ticket size={18} /> {booked ? "Booked" : bookingBusy ? "Booking..." : "Book this plan"}
+          </button>
+        )}
+        {onRegenerate && (
+          <button
+            type="button"
+            onClick={onRegenerate}
+            className="flex-1 min-w-[160px] rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold py-3 transition-colors flex items-center justify-center gap-2"
+          >
+            <RotateCcw size={18} /> Regenerate
+          </button>
+        )}
       </div>
+
+      {shareNotice && <p className="mt-3 text-sm font-medium text-emerald-600">{shareNotice}</p>}
 
       {onPlanAnother && (
         <button
@@ -193,6 +382,69 @@ export default function ItineraryResults({
           Plan another trip
         </button>
       )}
+    </div>
+  );
+}
+
+// ── BookingLinks ──────────────────────────────────────────────────────────────
+// Provides external redirect links to official travel booking platforms.
+// Tripzy does NOT handle payments - it redirects to the platform's own site.
+
+const BOOKING_PLATFORMS = [
+  {
+    category: "✈️ Flights",
+    links: [
+      { name: "MakeMyTrip", color: "#E63946", getUrl: () => "https://www.makemytrip.com/flights/" },
+      { name: "IndiGo", color: "#13599A", getUrl: () => "https://www.goindigo.in/" },
+      { name: "Air India", color: "#C8102E", getUrl: () => "https://www.airindia.com/" },
+      { name: "EaseMyTrip", color: "#FF6D00", getUrl: () => "https://flight.easemytrip.com/" },
+    ],
+  },
+  {
+    category: "🚆 Trains",
+    links: [
+      { name: "IRCTC", color: "#1A4B8C", getUrl: () => "https://www.irctc.co.in/" },
+      { name: "RailYatri", color: "#E54B4B", getUrl: () => "https://www.railyatri.in/" },
+    ],
+  },
+  {
+    category: "🚌 Buses",
+    links: [
+      { name: "RedBus", color: "#D84E43", getUrl: () => "https://www.redbus.in/" },
+      { name: "AbhiBus", color: "#2E7D32", getUrl: () => "https://www.abhibus.com/" },
+    ],
+  },
+];
+
+function BookingLinks({ destination: _destination }) {
+  return (
+    <div className="mt-8 mb-2">
+      <h2 className="text-xl font-bold mb-1">Book Your Trip</h2>
+      <p className="text-sm text-slate-500 mb-4">
+        We&apos;ll redirect you to official platforms. Tripzy does not handle payments or reservations.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {BOOKING_PLATFORMS.map((group) => (
+          <div key={group.category} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="font-semibold text-sm text-slate-700 mb-3">{group.category}</p>
+            <div className="flex flex-col gap-2">
+              {group.links.map((platform) => (
+                <a
+                  key={platform.name}
+                  href={platform.getUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: platform.color }}
+                >
+                  {platform.name}
+                  <span className="ml-auto text-xs opacity-80">↗</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

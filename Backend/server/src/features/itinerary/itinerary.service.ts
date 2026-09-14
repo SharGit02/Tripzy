@@ -1,3 +1,8 @@
+/**
+ * Direct itinerary generation, PDF, regenerate, and CRUD.
+ * Questionnaire / Q&A is extracted to itinerary.questionnaire.future.ts
+ * (FUTURE USE — not imported by routes).
+ */
 import {
     itineraryAI,
     validateItineraryIntegrity,
@@ -2189,6 +2194,7 @@ export const itineraryService = {
         fields: {
             title?: string;
             status?: string;
+            itineraryData?: any;
         }
     ) {
         return itineraryRepository
@@ -2197,184 +2203,5 @@ export const itineraryService = {
                 userId,
                 fields
             );
-    },
-
-    async generateQuestions(
-        input: any,
-        userId: string
-    ): Promise<{
-        questions: any[];
-        itineraryId: string;
-    }> {
-        const {
-            questions,
-        } =
-            await itineraryAI
-                .generateQuestions(
-                    input,
-                    userId
-                );
-
-        const days =
-            calculateDays(
-                input.startDate,
-                input.endDate
-            );
-
-        const draft =
-            await itineraryRepository
-                .create(
-                    userId,
-                    {
-                        title:
-                            `Trip to ${input.destination} (Planning)`,
-
-                        destination:
-                            input.destination,
-
-                        startDate:
-                            input.startDate,
-
-                        endDate:
-                            input.endDate,
-
-                        totalDays:
-                            days,
-
-                        currency:
-                            "INR",
-
-                        itineraryData:
-                            {} as any,
-
-                        userAnswers:
-                            input.previousAnswers ||
-                            {},
-
-                        status:
-                            "draft",
-                    }
-                );
-
-        await itineraryRepository
-            .saveQuestions(
-                draft.id,
-                questions.map(
-                    (q: any) => ({
-                        itineraryId:
-                            draft.id,
-
-                        step:
-                            q.step,
-
-                        question:
-                            q.question,
-
-                        questionType:
-                            q.questionType,
-
-                        options:
-                            q.options ||
-                            null,
-
-                        answer:
-                            null,
-
-                        isRequired:
-                            q.isRequired,
-                    })
-                )
-            );
-
-        return {
-            questions,
-            itineraryId:
-                draft.id,
-        };
-    },
-
-    async submitAnswer(
-        itineraryId: string,
-        step: number,
-        answer: unknown,
-        userId: string
-    ): Promise<any | null> {
-        const existing =
-            await itineraryRepository
-                .findByIdForUser(
-                    itineraryId,
-                    userId
-                );
-
-        if (!existing) {
-            return null;
-        }
-
-        await itineraryRepository
-            .saveAnswer(
-                itineraryId,
-                step,
-                answer
-            );
-
-        const questions =
-            await itineraryRepository
-                .getQuestionsByItineraryId(
-                    itineraryId
-                );
-
-        const userAnswers:
-            Record<string, any> = {};
-
-        questions.forEach(
-            (question: any) => {
-                if (
-                    question.answer !==
-                        null &&
-                    question.answer !==
-                        undefined
-                ) {
-                    userAnswers[
-                        `step_${question.step}`
-                    ] =
-                        question.answer;
-                }
-            }
-        );
-
-        await itineraryRepository
-            .updateForUser(
-                itineraryId,
-                userId,
-                {
-                    userAnswers,
-                }
-            );
-
-        const updatedQuestion =
-            questions.find(
-                (question: any) =>
-                    question.step ===
-                    step
-            );
-
-        return updatedQuestion
-            ? {
-                  id:
-                      updatedQuestion.id,
-                  step:
-                      updatedQuestion.step,
-                  question:
-                      updatedQuestion.question,
-                  questionType:
-                      updatedQuestion.questionType,
-                  options:
-                      updatedQuestion.options,
-                  answer:
-                      updatedQuestion.answer,
-                  isRequired:
-                      updatedQuestion.isRequired,
-              }
-            : null;
     },
 };

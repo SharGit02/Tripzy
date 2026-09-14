@@ -19,7 +19,11 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(morgan("dev"));
-app.use(helmet());
+app.use(
+    helmet({
+        crossOriginResourcePolicy: { policy: "cross-origin" },
+    })
+);
 app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));

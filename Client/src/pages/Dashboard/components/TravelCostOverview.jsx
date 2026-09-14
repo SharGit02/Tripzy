@@ -1,23 +1,15 @@
-import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Train, Bus, PlaneTakeoff, TrendingUp, TrendingDown, Star } from "lucide-react";
-import { fetchTravelCosts } from "../data/travelCostsMock";
+import { Map, TrendingUp, TrendingDown, Star, PlaneTakeoff, Ticket } from "lucide-react";
 
-const MODE_ICONS = { Train: Train, Bus: Bus, Flight: PlaneTakeoff };
+const MODE_ICONS = { Itineraries: Map, "Fare searches": PlaneTakeoff, Bookings: Ticket };
 const MODE_COLORS = {
-    Train: { bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-100" },
-    Bus: { bg: "bg-green-50", text: "text-green-600", border: "border-green-100" },
-    Flight: { bg: "bg-purple-50", text: "text-purple-600", border: "border-purple-100" },
+    Itineraries: { bg: "bg-blue-50", text: "text-blue-600" },
+    "Fare searches": { bg: "bg-purple-50", text: "text-purple-600" },
+    Bookings: { bg: "bg-green-50", text: "text-green-600" },
 };
 
-export default function TravelCostOverview() {
-    const [data, setData] = useState(null);
-
-    useEffect(() => {
-        fetchTravelCosts(2026).then(setData);
-    }, []);
-
-    if (!data) return null;
+export default function TravelCostOverview({ costView }) {
+    if (!costView) return null;
 
     return (
         <motion.div
@@ -26,13 +18,12 @@ export default function TravelCostOverview() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col gap-4"
         >
-            <h2 className="text-base font-bold text-[#0f2442]">Travel Cost Overview</h2>
+            <h2 className="text-base font-bold text-[#0f2442]">Cost overview</h2>
 
-            {/* Mode rows */}
             <div className="flex flex-col gap-3">
-                {data.overview.map((item) => {
+                {costView.overview.map((item) => {
                     const Icon = MODE_ICONS[item.mode] || PlaneTakeoff;
-                    const colors = MODE_COLORS[item.mode] || MODE_COLORS.Flight;
+                    const colors = MODE_COLORS[item.mode] || MODE_COLORS.Itineraries;
                     const isNeg = item.change < 0;
 
                     return (
@@ -46,7 +37,7 @@ export default function TravelCostOverview() {
                                 </div>
                                 <div>
                                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{item.mode}</p>
-                                    <p className="text-[11px] text-slate-400">Avg. Cost</p>
+                                    <p className="text-[11px] text-slate-400">Monthly avg</p>
                                 </div>
                             </div>
                             <p className="text-base font-black text-[#0f2442]">
@@ -62,15 +53,14 @@ export default function TravelCostOverview() {
                 })}
             </div>
 
-            {/* Smart Pick */}
-            {data.smartPick && (
+            {costView.smartPick && (
                 <div className="flex items-start gap-2.5 bg-[#ecfdf5] border border-emerald-100 rounded-xl px-4 py-3">
                     <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 mt-0.5">
                         <Star size={13} className="text-white fill-white" />
                     </div>
                     <div>
                         <p className="text-xs font-bold text-emerald-700 mb-0.5">Smart Pick</p>
-                        <p className="text-xs text-emerald-600">{data.smartPick}</p>
+                        <p className="text-xs text-emerald-600">{costView.smartPick}</p>
                     </div>
                 </div>
             )}

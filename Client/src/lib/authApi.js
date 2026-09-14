@@ -76,7 +76,12 @@ export async function request(path, options = {}, { isRetry = false, planFallbac
   // normal error either way — deciding what a final 401 means (redirect to
   // login vs. degrade quietly) is left to the caller, since some callers are
   // on public pages making a best-effort authenticated call, not gated pages.
-  if (response.status === 401 && !isRetry && !AUTH_PATHS_EXEMPT_FROM_REFRESH.includes(path)) {
+  if (
+    response.status === 401 &&
+    !isRetry &&
+    !AUTH_PATHS_EXEMPT_FROM_REFRESH.includes(path) &&
+    !path.includes("/public")
+  ) {
     const { response: refreshResponse } = await rawFetch("/auth/refresh", { method: "POST" });
 
     if (refreshResponse.ok) {
@@ -173,6 +178,17 @@ export function fetchFlightFarePredictionById(id) {
 }
 
 // Itinerary API functions - Direct generation only
+export function createBooking(payload) {
+  return request("/bookings", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchPublicItinerary(id) {
+  return request(`/plan/${id}/public`);
+}
+
 export function generateItinerary(payload) {
   return request("/plan/generate", {
     method: "POST",

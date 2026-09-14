@@ -39,6 +39,13 @@ export default function UserNavbar() {
     { name: "My Itineraries", path: "/bookings", icon: Calendar },
   ];
 
+  const isNavActive = (path) => {
+    if (path === "/plan") {
+      return location.pathname === "/plan" || location.pathname.startsWith("/plan/");
+    }
+    return location.pathname === path;
+  };
+
   useEffect(() => {
     let isMounted = true;
     fetchCurrentUser()
@@ -102,7 +109,7 @@ export default function UserNavbar() {
         <div className="hidden md:flex items-center gap-6 lg:gap-8">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = isNavActive(item.path);
 
             return (
               <Link
@@ -227,7 +234,7 @@ export default function UserNavbar() {
                         key={item.name}
                         to={item.path}
                         onClick={() => setMenuOpen(false)}
-                        className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${location.pathname === item.path
+                        className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${isNavActive(item.path)
                           ? "text-[#2563EB]"
                           : "text-slate-700 hover:bg-slate-50 hover:text-[#2563EB]"
                           }`}
