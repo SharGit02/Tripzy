@@ -48,6 +48,17 @@ const envSchema = z
         // 60s, not 30s: Gemini 3.x models spend hidden "thinking" tokens before
         // emitting text, and structured-output calls were observed exceeding 30s.
         GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
+
+        // OAuth configuration (Google & GitHub)
+        GOOGLE_CLIENT_ID: z.string().trim().optional(),
+        GOOGLE_CLIENT_SECRET: z.string().trim().optional(),
+        GOOGLE_CALLBACK_URL: z.string().trim().optional(),
+
+        GITHUB_CLIENT_ID: z.string().trim().optional(),
+        GITHUB_CLIENT_SECRET: z.string().trim().optional(),
+        GITHUB_CALLBACK_URL: z.string().trim().optional(),
+
+        FRONTEND_URL: z.string().trim().optional(),
     })
     .refine((data) => Boolean(data.DATABASE_URL || data.NEON_URI), {
         message: "DATABASE_URL or NEON_URI is required",

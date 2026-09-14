@@ -26,7 +26,7 @@ function cookieOptions(maxAge: number) {
     };
 }
 
-function setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
+export function setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
     res.cookie("accessToken", accessToken, cookieOptions(15 * 60 * 1000));
     res.cookie("refreshToken", refreshToken, cookieOptions(7 * 24 * 60 * 60 * 1000));
 }
