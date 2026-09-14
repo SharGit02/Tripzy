@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import ItineraryMap from "./ItineraryMap";
 import { fetchFlightFarePrediction } from "../../lib/authApi";
+import { getBookingPlatforms } from "./bookingLinks";
 
 function formatTime12Hour(timeStr) {
   if (!timeStr) return "";
@@ -665,7 +666,18 @@ export default function ItineraryResults({
         </ul>
 
         {/* ── External Booking Links ── */}
-        <BookingLinks destination={itinerary.destination} />
+        <BookingLinks
+          origin={sourceCity}
+          destination={itinerary.destination}
+          startDate={itinerary.startDate}
+          endDate={itinerary.endDate}
+          adults={
+            itinerary.adults ||
+            itinerary.groupSize?.adults ||
+            itinerary.userAnswers?.adults ||
+            1
+          }
+        />
       </div>
 
       <div className="mt-8 flex gap-3 flex-wrap">
@@ -736,48 +748,26 @@ export default function ItineraryResults({
 // Provides external redirect links to official travel booking platforms.
 // Tripzy does NOT handle payments - it redirects to the platform's own site.
 
-const BOOKING_PLATFORMS = [
-  {
-    category: "✈️ Flights",
-    links: [
-      { name: "MakeMyTrip", color: "#E63946", getUrl: () => "https://www.makemytrip.com/flights/" },
-      { name: "IndiGo", color: "#13599A", getUrl: () => "https://www.goindigo.in/" },
-      { name: "Air India", color: "#C8102E", getUrl: () => "https://www.airindia.com/" },
-      { name: "EaseMyTrip", color: "#FF6D00", getUrl: () => "https://flight.easemytrip.com/" },
-    ],
-  },
-  {
-    category: "🚆 Trains",
-    links: [
-      { name: "IRCTC", color: "#1A4B8C", getUrl: () => "https://www.irctc.co.in/" },
-      { name: "RailYatri", color: "#E54B4B", getUrl: () => "https://www.railyatri.in/" },
-    ],
-  },
-  {
-    category: "🚌 Buses",
-    links: [
-      { name: "RedBus", color: "#D84E43", getUrl: () => "https://www.redbus.in/" },
-      { name: "AbhiBus", color: "#2E7D32", getUrl: () => "https://www.abhibus.com/" },
-    ],
-  },
-];
+function BookingLinks({ origin, destination, startDate, endDate, adults }) {
+  const groups = getBookingPlatforms({ origin, destination, startDate, endDate, adults });
 
-function BookingLinks({ destination: _destination }) {
   return (
     <div className="mt-8 mb-2">
       <h2 className="text-xl font-bold mb-1">Book Your Trip</h2>
       <p className="text-sm text-slate-500 mb-4">
-        We&apos;ll redirect you to official platforms. Tripzy does not handle payments or reservations.
+        Opens the official site with this trip's cities and dates filled in where the site allows it. Tripzy does not handle payments.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
-        {BOOKING_PLATFORMS.map((group) => (
+        {groups.map((group) => (
           <div key={group.category} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <p className="font-semibold text-sm text-slate-700 mb-3">{group.category}</p>
+            <p className="font-semibold text-sm text-slate-700 mb-3">
+              {group.icon} {group.category}
+            </p>
             <div className="flex flex-col gap-2">
               {group.links.map((platform) => (
                 <a
                   key={platform.name}
-                  href={platform.getUrl()}
+                  href={platform.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"

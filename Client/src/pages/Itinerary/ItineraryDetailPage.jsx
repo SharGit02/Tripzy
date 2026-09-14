@@ -165,10 +165,10 @@ export default function ItineraryDetailPage() {
         <UserNavbar />
         <main className="pt-28 px-4 sm:px-8 pb-16 max-w-7xl mx-auto w-full">
           <Link
-            to="/bookings"
+            to="/plan"
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-[#2563EB] transition-colors mb-6"
           >
-            <ArrowLeft size={15} /> Back to My Itineraries
+            <ArrowLeft size={15} /> Back to My Home
           </Link>
           <ItineraryResults
             status={state.status}
