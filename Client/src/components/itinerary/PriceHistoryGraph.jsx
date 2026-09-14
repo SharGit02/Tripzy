@@ -29,12 +29,12 @@ export default function PriceHistoryGraph({ itinerary, sourceCity }) {
       const startDateStr = baseDate.toISOString().substring(0, 10);
       
       try {
-        // Fetch 31 days (15 before, current, 15 after)
+        // Fetch 30 days (15 before, current, 14 after)
         const response = await fetchFlightFarePrediction({
           origin: rawOrigin,
           destination: rawDest,
           startDate: startDateStr,
-          windowDays: 31,
+          windowDays: 30,
         });
 
         const quotes =
