@@ -20,9 +20,7 @@ boolean-mask filter - only the cost of computing them differs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
-
-import pandas as pd
+from datetime import date, datetime
 
 # The notebook's create_future_row() hard-codes this for every future
 # prediction, since no external festival calendar is available for dates
@@ -92,10 +90,20 @@ def create_future_row(
     matching the notebook's create_future_row(). Returns a plain dict rather
     than a one-row DataFrame so the caller can batch many rows into a single
     pd.DataFrame (and a single model.predict() call) instead of one per row."""
-    ts = pd.Timestamp(date_)
+    # Use stdlib datetime instead of pd.Timestamp to avoid importing pandas
+    # at startup (pandas alone costs ~100 MB RSS on the free Render tier).
+    if isinstance(date_, datetime):
+        dt = date_.date() if hasattr(date_, 'date') else date_
+    else:
+        dt = date_
+    _WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    day_of_week = _WEEKDAYS[dt.weekday()]
     route = f"{origin}_{destination}"
-    day_of_week = ts.day_name()
-    season = get_season(date_)
+    season = get_season(dt)
+
+    day_of_year = (dt - dt.replace(month=1, day=1)).days + 1
+    quarter = (dt.month - 1) // 3 + 1
+    is_weekend = int(dt.weekday() >= 5)
 
     return {
         "Origin": origin,
@@ -103,19 +111,19 @@ def create_future_row(
         "Route": route,
         "Airline": airline,
         "FlightNumber": flight_number,
-        "Year": ts.year,
-        "Month": ts.month,
-        "Day": ts.day,
-        "DayOfYear": ts.dayofyear,
+        "Year": dt.year,
+        "Month": dt.month,
+        "Day": dt.day,
+        "DayOfYear": day_of_year,
         "DayOfWeek": day_of_week,
-        "Weekend": int(ts.dayofweek >= 5),
-        "Quarter": ts.quarter,
+        "Weekend": is_weekend,
+        "Quarter": quarter,
         "Season": season,
         "FestivalName": FUTURE_FESTIVAL_NAME,
         "Hist_Route_Fare": stats.route(route),
         "Hist_RouteAirline_Fare": stats.route_airline(route, airline),
         "Hist_RouteFlight_Fare": stats.route_flight(route, flight_number),
-        "Hist_RouteMonth_Fare": stats.route_month(route, ts.month),
+        "Hist_RouteMonth_Fare": stats.route_month(route, dt.month),
         "Hist_RouteDayOfWeek_Fare": stats.route_dow(route, day_of_week),
         "Hist_Airline_Fare": stats.airline(airline),
         "Hist_Global_Fare": stats.global_mean,
@@ -134,16 +142,21 @@ def find_flights(
 
 
 def align_for_model(
-    rows_df: pd.DataFrame,
+    rows_df: "pd.DataFrame",
     features: list[str],
     categorical_cols: list[str],
-    categorical_dtypes: dict[str, pd.CategoricalDtype],
-) -> pd.DataFrame:
+    categorical_dtypes: dict,
+) -> "pd.DataFrame":
     """Casts categorical columns to the training-time category levels and
     reindexes to the exact feature order the model expects. The notebook did
     this inline (it had X_train in scope); the pkl only ships `features` and
     `categorical_cols`, so the actual category levels are reconstructed by
-    the caller (see predictor.load_artifacts) and passed in here."""
+    the caller (see predictor.load_artifacts) and passed in here.
+
+    pandas is imported lazily here so the module can be loaded at startup
+    without paying pandas' ~100 MB RSS import cost."""
+    import pandas as pd  # lazy import — only paid at first prediction
+
     aligned = rows_df.copy()
 
     for col in categorical_cols:
