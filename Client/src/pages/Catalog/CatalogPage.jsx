@@ -23,24 +23,10 @@ export default function CatalogPage() {
     }
 
     setSearchError("");
-    setItineraryState({ status: "loading", error: "" });
-
-    try {
-      const data = await generateItinerary(parsed.payload);
-      const itineraryId = data.itineraryId || data.itinerary?.id;
-      if (!itineraryId) {
-        throw new Error("The itinerary was created, but we didn't get an ID back. Check My Itineraries.");
-      }
-      navigate(`/plan/${itineraryId}`);
-    } catch (err) {
-      setItineraryState({
-        status: "error",
-        error: err instanceof Error ? err.message : "Failed to generate itinerary. Please try again.",
-      });
-    }
+    navigate("/plan/itinerary/generating", { state: { payload: parsed.payload } });
   }, [navigate]);
 
-  const submitting = itineraryState.status === "loading";
+  const submitting = false;
 
   return (
     <div className="min-h-screen bg-[#F7F9FC] text-[#133C55] flex flex-col justify-between">

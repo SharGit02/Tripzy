@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Loader2,
   AlertCircle,
@@ -9,8 +8,101 @@ import {
   CalendarPlus,
   Pencil,
   Ticket,
+  Sunrise,
+  Utensils,
+  MapPin,
+  Moon,
+  Car,
+  Plane,
+  Bed,
+  Activity
 } from "lucide-react";
 import ItineraryMap from "./ItineraryMap";
+import { fetchFlightFarePrediction } from "../../lib/authApi";
+
+function formatTime12Hour(timeStr) {
+  if (!timeStr) return "";
+  const [hours, minutes] = timeStr.split(":");
+  if (!hours || isNaN(parseInt(hours, 10))) return timeStr;
+  const h = parseInt(hours, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${minutes || '00'} ${ampm}`;
+}
+
+function getActivityIcon(type, title) {
+  const t = (type || "").toLowerCase();
+  const ti = (title || "").toLowerCase();
+  
+  if (t === "wake up" || ti.includes("wake") || ti.includes("morning")) return <Sunrise size={16} className="text-orange-500" />;
+  if (t === "breakfast" || t === "lunch" || t === "dinner" || t === "meal" || ti.includes("food") || ti.includes("eat")) return <Utensils size={16} className="text-red-500" />;
+  if (ti.includes("evening") || ti.includes("night") || ti.includes("sleep")) return <Moon size={16} className="text-indigo-500" />;
+  if (t === "transport" || ti.includes("drive") || ti.includes("taxi")) return <Car size={16} className="text-slate-500" />;
+  if (ti.includes("flight") || ti.includes("fly") || ti.includes("airport")) return <Plane size={16} className="text-blue-500" />;
+  if (ti.includes("hotel") || ti.includes("check-in") || ti.includes("rest")) return <Bed size={16} className="text-purple-500" />;
+  if (t === "activity" || t === "sightseeing") return <MapPin size={16} className="text-emerald-500" />;
+  
+  return <Activity size={16} className="text-blue-400" />;
+}
+
+function FlightPredictions({ itinerary }) {
+  const [flights, setFlights] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!itinerary?.origin || !itinerary?.destination || !itinerary?.startDate) {
+      setLoading(false);
+      return;
+    }
+
+    async function loadFlights() {
+      try {
+        const data = await fetchFlightFarePrediction({
+          origin: itinerary.origin,
+          destination: itinerary.destination,
+          startDate: itinerary.startDate.substring(0, 10),
+          windowDays: 7
+        });
+        
+        if (data && data.quotes) {
+           const sorted = data.quotes.sort((a, b) => a.predicted_fare - b.predicted_fare).slice(0, 4);
+           setFlights(sorted);
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Could not load flight predictions.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadFlights();
+  }, [itinerary]);
+
+  if (loading) return <div className="text-sm text-slate-500 mb-6 mt-6">Loading flight predictions...</div>;
+  if (error || flights.length === 0) return null;
+
+  return (
+    <div className="mb-6 mt-6">
+      <h2 className="text-xl font-bold mb-3">Predicted Flights (Top Fares)</h2>
+      <div className="grid gap-4 md:grid-cols-2">
+        {flights.map((flight, i) => (
+          <div key={i} className="rounded-xl border border-slate-200 overflow-hidden flex bg-white shadow-sm hover:shadow transition-shadow">
+            <div className="w-2/5 bg-slate-50 flex items-center justify-center p-2 border-r border-slate-100">
+              <img src="/indigo.jpeg" alt="Flight" className="w-full h-auto object-contain mix-blend-multiply rounded-lg max-h-24" />
+            </div>
+            <div className="w-3/5 p-4 flex flex-col justify-center">
+              <p className="font-bold text-slate-800">{flight.airline}</p>
+              <p className="text-xs text-slate-500 mb-1">Flight #{flight.flight_number}</p>
+              <p className="text-xs font-medium text-slate-600 bg-slate-100 w-fit px-2 py-0.5 rounded">{flight.date} ({flight.day_of_week})</p>
+              <p className="font-bold text-[#2563EB] text-lg mt-2">₹{Math.round(flight.predicted_fare).toLocaleString()}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return "";
@@ -140,6 +232,8 @@ export default function ItineraryResults({
             </div>
           ))}
         </div>
+
+        <FlightPredictions itinerary={itinerary} />
 
         <h2 className="text-xl font-bold mb-3">Accommodations</h2>
         <div className="space-y-3 mb-6">
@@ -288,8 +382,11 @@ export default function ItineraryResults({
                   </div>
                 ) : (
                   (day.activities || []).map((activity, i) => (
-                    <div key={i} className="flex items-start gap-3 text-sm">
-                      <span className="w-16 text-slate-500 font-mono">{activity.time}</span>
+                    <div key={i} className="flex items-start gap-3 text-sm py-1 border-b border-slate-50 last:border-0">
+                      <div className="flex items-center gap-2 w-28 flex-shrink-0">
+                        {getActivityIcon(activity.type, activity.title)}
+                        <span className="text-slate-500 font-medium whitespace-nowrap">{formatTime12Hour(activity.time)}</span>
+                      </div>
                       <span className="rounded px-2 py-0.5 bg-[#EBF3FE] text-[#1D4ED8] text-xs font-medium capitalize">
                         {activity.type}
                       </span>

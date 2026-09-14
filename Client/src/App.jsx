@@ -8,6 +8,7 @@ import ProfilePage from "./pages/Profile/ProfilePage";
 import ItineraryDetailPage from "./pages/Itinerary/ItineraryDetailPage";
 import ShareItineraryPage from "./pages/Itinerary/ShareItineraryPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import GeneratingItineraryPage from "./pages/Itinerary/GeneratingItineraryPage";
 import "./styles/index.css";
 
 export default function App() {
@@ -29,7 +30,15 @@ export default function App() {
           }
         />
         <Route
-          path="/plan/:id"
+          path="/plan/itinerary/generating"
+          element={
+            <ProtectedRoute>
+              <GeneratingItineraryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/plan/itinerary/:id"
           element={
             <ProtectedRoute>
               <ItineraryDetailPage />
