@@ -226,7 +226,7 @@ function FlightPredictions({ itinerary, source }) {
           [];
 
         if (quotes.length > 0) {
-          const formatted = quotes
+          const sortedQuotes = quotes
             .map((q) => ({
               airline: q.airline || "IndiGo",
               flightNumber: q.flightNumber ?? q.flight_number ?? "601",
@@ -237,10 +237,37 @@ function FlightPredictions({ itinerary, source }) {
               destination: destCity,
             }))
             .filter((q) => q.predictedFare > 0)
-            .sort((a, b) => a.predictedFare - b.predictedFare)
-            .slice(0, 3);
+            .sort((a, b) => a.predictedFare - b.predictedFare);
 
-          setFlights(formatted);
+          const diverseFlights = [];
+          const seenAirlines = new Set();
+
+          // Pass 1: Get the cheapest flight for each distinct airline
+          for (const q of sortedQuotes) {
+            if (!seenAirlines.has(q.airline)) {
+              seenAirlines.add(q.airline);
+              diverseFlights.push(q);
+            }
+            if (diverseFlights.length >= 3) break;
+          }
+
+          // Pass 2: If fewer than 3 unique airlines exist, fill remaining slots
+          if (diverseFlights.length < 3) {
+            for (const q of sortedQuotes) {
+              if (diverseFlights.length >= 3) break;
+              const alreadyAdded = diverseFlights.some(
+                (f) => f.flightNumber === q.flightNumber && f.airline === q.airline && f.date === q.date
+              );
+              if (!alreadyAdded) {
+                diverseFlights.push(q);
+              }
+            }
+          }
+
+          // Final sort to ensure the 3 items are strictly in price order
+          diverseFlights.sort((a, b) => a.predictedFare - b.predictedFare);
+
+          setFlights(diverseFlights);
         } else {
           setFlights(getFallbackFlights(finalOrigin, destCity, startDateStr));
         }
