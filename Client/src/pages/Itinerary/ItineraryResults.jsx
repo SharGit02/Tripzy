@@ -21,6 +21,7 @@ import {
 import ItineraryMap from "./ItineraryMap";
 import { fetchFlightFarePrediction } from "../../lib/authApi";
 import { getBookingPlatforms } from "./bookingLinks";
+import PlaceTicketCard from "../../components/itinerary/PlaceTicketCard";
 
 function formatTime12Hour(timeStr) {
   if (!timeStr) return "";
@@ -587,20 +588,32 @@ export default function ItineraryResults({
           ))}
         </div>
 
-        <h2 className="text-xl font-bold mb-3">Places to Visit</h2>
-        <div className="space-y-3 mb-6">
-          {placesToVisit.slice(0, 8).map((place, i) => (
-            <div key={i} className="rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+        {/* Places to Visit Section */}
+        {placesToVisit.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="font-semibold">{place.name}</p>
-                <p className="text-sm text-slate-500">
-                  {place.category} · {place.location} · {place.visitDurationHours}h
+                <h2 className="text-xl font-bold text-slate-900">Places to Visit</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Top attractions & highlights curated for {itinerary.destination || "your trip"}
                 </p>
               </div>
-              <span className="text-[#2563EB] font-semibold">{place.rating}★</span>
+              <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full">
+                {placesToVisit.slice(0, 8).length} Attractions
+              </span>
             </div>
-          ))}
-        </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {placesToVisit.slice(0, 8).map((place, i) => (
+                <PlaceTicketCard
+                  key={`${place.name}-${i}`}
+                  place={place}
+                  destination={itinerary.destination}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         <h2 className="text-xl font-bold mb-3">Day-by-Day Schedule</h2>
         <div className="space-y-4">

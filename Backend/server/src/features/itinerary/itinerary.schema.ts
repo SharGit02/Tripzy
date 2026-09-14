@@ -14,6 +14,10 @@ export const ItineraryPlaceSchema = z.object({
     visitDurationHours: z.number().positive(),
     bestTimeToVisit: z.string(),
     priceRange: z.string().optional(),
+    imageUrl: z.string().optional(),
+    imageAuthor: z.string().optional(),
+    imageLicense: z.string().optional(),
+    imageSource: z.string().optional(),
 });
 
 export const ItineraryAccommodationSchema = z.object({
@@ -109,6 +113,10 @@ export const ItineraryOutputSchema = z.object({
         visitDurationHours: z.number().positive(),
         bestTimeToVisit: z.string(),
         priceRange: z.string().optional(),
+        imageUrl: z.string().optional(),
+        imageAuthor: z.string().optional(),
+        imageLicense: z.string().optional(),
+        imageSource: z.string().optional(),
     })).min(3).max(10),
     transportOptions: z.array(z.object({
         type: z.enum(["flight", "train", "bus", "cab", "metro", "rental", "walking"]),

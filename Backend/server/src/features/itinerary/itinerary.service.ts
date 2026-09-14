@@ -982,6 +982,11 @@ function buildPlaces(
                     place?.priceRange ??
                     "Free"
                 ),
+
+            imageUrl: place?.imageUrl ? String(place.imageUrl) : undefined,
+            imageAuthor: place?.imageAuthor ? String(place.imageAuthor) : undefined,
+            imageLicense: place?.imageLicense ? String(place.imageLicense) : undefined,
+            imageSource: place?.imageSource ? String(place.imageSource) : undefined,
         });
     };
 
