@@ -29,7 +29,10 @@ export default function GeneratingItineraryPage() {
       if (!itineraryId) {
         throw new Error("The itinerary was created, but we didn't get an ID back.");
       }
-      navigate(`/plan/itinerary/${itineraryId}`, { replace: true });
+      navigate(`/plan/itinerary/${itineraryId}`, {
+        replace: true,
+        state: { fromCity: payload?.fromCity || payload?.origin, origin: payload?.origin || payload?.fromCity },
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to generate itinerary. Please try again.";
       setError(msg);

@@ -1,4 +1,23 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+
+const GEO_GRANTED_KEY = "tripzee_geo_granted";
+
+function readStoredGeoGranted() {
+    try {
+        return localStorage.getItem(GEO_GRANTED_KEY) === "1";
+    } catch {
+        return false;
+    }
+}
+
+function writeStoredGeoGranted(granted) {
+    try {
+        if (granted) localStorage.setItem(GEO_GRANTED_KEY, "1");
+        else localStorage.removeItem(GEO_GRANTED_KEY);
+    } catch {
+        /* ignore quota / private mode */
+    }
+}
 
 export const CITIES_LIST = [
     "Nagpur",
@@ -89,9 +108,45 @@ const LocationContext = createContext();
 
 export const LocationProvider = ({ children }) => {
     const [currentCity, setCurrentCity] = useState("Nagpur");
+    const [geoGranted, setGeoGrantedState] = useState(readStoredGeoGranted);
+
+    const setGeoGranted = useCallback((granted) => {
+        setGeoGrantedState(granted);
+        writeStoredGeoGranted(granted);
+    }, []);
+
+    useEffect(() => {
+        if (!navigator.permissions?.query) return undefined;
+
+        let permissionStatus;
+        let cancelled = false;
+
+        navigator.permissions
+            .query({ name: "geolocation" })
+            .then((status) => {
+                permissionStatus = status;
+                if (cancelled) {
+                    status.onchange = null;
+                    return;
+                }
+                if (status.state === "granted") setGeoGranted(true);
+                else if (status.state === "denied") setGeoGranted(false);
+
+                status.onchange = () => {
+                    if (status.state === "granted") setGeoGranted(true);
+                    else if (status.state === "denied") setGeoGranted(false);
+                };
+            })
+            .catch(() => {});
+
+        return () => {
+            cancelled = true;
+            if (permissionStatus) permissionStatus.onchange = null;
+        };
+    }, [setGeoGranted]);
 
     return (
-        <LocationContext.Provider value={{ currentCity, setCurrentCity }}>
+        <LocationContext.Provider value={{ currentCity, setCurrentCity, geoGranted, setGeoGranted }}>
             {children}
         </LocationContext.Provider>
     );

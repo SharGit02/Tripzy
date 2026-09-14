@@ -159,6 +159,8 @@ export const DirectItineraryInputSchema = z.object({
         .max(150, "Destination can be at most 150 characters."),
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a valid start date."),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a valid return date."),
+    origin: z.string().trim().optional(),
+    fromCity: z.string().trim().optional(),
     adults: z.coerce.number().int("Adults must be a whole number.").positive("Add at least 1 adult.").max(10, "Adults can be at most 10.").default(2),
     children: z.coerce.number().int("Children must be a whole number.").nonnegative("Children cannot be negative.").max(10, "Children can be at most 10.").default(0),
     rooms: z.coerce.number().int("Rooms must be a whole number.").positive("Add at least 1 room.").max(10, "Rooms can be at most 10.").default(1),

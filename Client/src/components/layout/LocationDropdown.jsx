@@ -4,7 +4,7 @@ import { MapPin, Navigation, Loader2, Search, Check } from "lucide-react";
 import { CITIES_LIST, nearestCity, useLocationContext } from "../../context/LocationContext";
 
 export default function LocationDropdown({ isOpen, setIsOpen, align = "right" }) {
-    const { currentCity, setCurrentCity } = useLocationContext();
+    const { currentCity, setCurrentCity, geoGranted, setGeoGranted } = useLocationContext();
     const [searchQuery, setSearchQuery] = useState("");
     const [isDetectingLocation, setIsDetectingLocation] = useState(false);
     const [locationNotice, setLocationNotice] = useState("");
@@ -23,6 +23,7 @@ export default function LocationDropdown({ isOpen, setIsOpen, align = "right" })
                 const { city, km } = nearestCity(latitude, longitude);
                 setIsDetectingLocation(false);
                 setCurrentCity(city);
+                setGeoGranted(true);
                 setLocationNotice(
                     km < 80
                         ? `Detected ${city} from your GPS.`
@@ -74,30 +75,31 @@ export default function LocationDropdown({ isOpen, setIsOpen, align = "right" })
                             </div>
                         </div>
 
-                        {/* Enable Location Permission Card */}
-                        <div className="p-3 rounded-xl bg-gradient-to-br from-slate-50 to-blue-50/60 border border-slate-200/80 flex items-center justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                                <p className="text-xs font-bold text-[#0f2442]">
-                                    ENABLE LOCATION PERMISSION
-                                </p>
-                                <p className="text-[10px] text-slate-500 truncate">
-                                    Detect current location automatically
-                                </p>
+                        {!geoGranted && (
+                            <div className="p-3 rounded-xl bg-gradient-to-br from-slate-50 to-blue-50/60 border border-slate-200/80 flex items-center justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-bold text-[#0f2442]">
+                                        ENABLE LOCATION PERMISSION
+                                    </p>
+                                    <p className="text-[10px] text-slate-500 truncate">
+                                        Detect current location automatically
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleDetectLocation}
+                                    disabled={isDetectingLocation}
+                                    className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs whitespace-nowrap disabled:opacity-60"
+                                >
+                                    {isDetectingLocation ? (
+                                        <Loader2 size={13} className="animate-spin" />
+                                    ) : (
+                                        <Navigation size={13} />
+                                    )}
+                                    <span>{isDetectingLocation ? "Detecting..." : "ALLOW"}</span>
+                                </button>
                             </div>
-                            <button
-                                type="button"
-                                onClick={handleDetectLocation}
-                                disabled={isDetectingLocation}
-                                className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs whitespace-nowrap disabled:opacity-60"
-                            >
-                                {isDetectingLocation ? (
-                                    <Loader2 size={13} className="animate-spin" />
-                                ) : (
-                                    <Navigation size={13} />
-                                )}
-                                <span>{isDetectingLocation ? "Detecting..." : "ALLOW"}</span>
-                            </button>
-                        </div>
+                        )}
 
                         {locationNotice && (
                             <p className="text-[11px] font-semibold text-center text-blue-600">

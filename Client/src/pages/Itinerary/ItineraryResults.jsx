@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Loader2,
   AlertCircle,
@@ -46,60 +47,259 @@ function getActivityIcon(type, title) {
   return <Activity size={16} className="text-blue-400" />;
 }
 
+const CITY_AIRPORT_MAP = {
+  goa: "Goa",
+  calangute: "Goa",
+  panjim: "Goa",
+  anjuna: "Goa",
+  palolem: "Goa",
+  kerala: "Kochi",
+  kerela: "Kochi",
+  kochi: "Kochi",
+  cochin: "Kochi",
+  munnar: "Kochi",
+  alleppey: "Kochi",
+  varkala: "Kochi",
+  thiruvananthapuram: "Thiruvananthapuram",
+  rajasthan: "Jaipur",
+  jaipur: "Jaipur",
+  udaipur: "Udaipur",
+  jodhpur: "Jodhpur",
+  jaisalmer: "Jodhpur",
+  kashmir: "Srinagar",
+  srinagar: "Srinagar",
+  gulmarg: "Srinagar",
+  pahalgam: "Srinagar",
+  sonamarg: "Srinagar",
+  ladakh: "Leh",
+  leh: "Leh",
+  pangong: "Leh",
+  nubra: "Leh",
+  himachal: "Chandigarh",
+  "himachal pradesh": "Chandigarh",
+  shimla: "Chandigarh",
+  manali: "Chandigarh",
+  dharamshala: "Chandigarh",
+  varanasi: "Varanasi",
+  kashi: "Varanasi",
+  lucknow: "Lucknow",
+  meghalaya: "Guwahati",
+  shillong: "Guwahati",
+  cherrapunji: "Guwahati",
+  guwahati: "Guwahati",
+  delhi: "Delhi",
+  "new delhi": "Delhi",
+  mumbai: "Mumbai",
+  bombay: "Mumbai",
+  bengaluru: "Bengaluru",
+  bangalore: "Bengaluru",
+  kolkata: "Kolkata",
+  hyderabad: "Hyderabad",
+  chennai: "Chennai",
+  pune: "Pune",
+  ahmedabad: "Ahmedabad",
+};
+
+function resolveAirportCity(cityName, fallback = "Delhi") {
+  if (!cityName) return fallback;
+  const clean = String(cityName).trim().toLowerCase();
+  for (const [key, val] of Object.entries(CITY_AIRPORT_MAP)) {
+    if (clean.includes(key) || key.includes(clean)) {
+      return val;
+    }
+  }
+  return String(cityName).trim();
+}
+
+function getAirlineImage(airline) {
+  const a = (airline || "").toLowerCase();
+  if (a.includes("indigo")) return "/indigo.jpeg";
+  if (a.includes("air india") || a.includes("vistara")) return "/airindia.jpeg";
+  if (a.includes("spice")) return "/spicejet.jpeg";
+  if (a.includes("akasa") || a.includes("alaska") || a.includes("star") || a.includes("trujet") || a.includes("flybig")) return "/alaskaair.jpeg";
+  return "/indigo.jpeg";
+}
+
 function FlightPredictions({ itinerary }) {
+  const location = useLocation();
   const [flights, setFlights] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [routeInfo, setRouteInfo] = useState({ origin: "Delhi", destination: "Goa" });
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!itinerary?.origin || !itinerary?.destination || !itinerary?.startDate) {
-      setLoading(false);
-      return;
-    }
+    const rawOrigin =
+      location.state?.fromCity ||
+      location.state?.origin ||
+      itinerary?.origin ||
+      itinerary?.fromCity ||
+      itinerary?.userAnswers?.fromCity ||
+      itinerary?.userAnswers?.origin ||
+      (itinerary?.transport && itinerary?.transport[0]?.from) ||
+      "Delhi";
+
+    const rawDest = itinerary?.destination || "Goa";
+    const sourceCity = resolveAirportCity(rawOrigin, "Delhi");
+    const destCity = resolveAirportCity(rawDest, "Goa");
+    const finalOrigin =
+      sourceCity.toLowerCase() === destCity.toLowerCase()
+        ? destCity.toLowerCase() === "delhi"
+          ? "Mumbai"
+          : "Delhi"
+        : sourceCity;
+
+    setRouteInfo({ origin: finalOrigin, destination: destCity });
 
     async function loadFlights() {
+      setLoading(true);
+      setError("");
+
       try {
+        const startDateStr = itinerary?.startDate
+          ? String(itinerary.startDate).substring(0, 10)
+          : new Date().toISOString().substring(0, 10);
+
         const data = await fetchFlightFarePrediction({
-          origin: itinerary.origin,
-          destination: itinerary.destination,
-          startDate: itinerary.startDate.substring(0, 10),
-          windowDays: 7
+          origin: finalOrigin,
+          destination: destCity,
+          startDate: startDateStr,
+          windowDays: 7,
         });
-        
-        if (data && data.quotes) {
-           const sorted = data.quotes.sort((a, b) => a.predicted_fare - b.predicted_fare).slice(0, 4);
-           setFlights(sorted);
+
+        const quotes =
+          data?.prediction?.results?.quotes ||
+          data?.results?.quotes ||
+          data?.quotes ||
+          [];
+
+        if (quotes.length > 0) {
+          const formatted = quotes
+            .map((q) => ({
+              airline: q.airline || "IndiGo",
+              flightNumber: q.flightNumber ?? q.flight_number ?? "601",
+              date: q.date || "",
+              dayOfWeek: q.dayOfWeek || q.day_of_week || "",
+              predictedFare: Number(q.predictedFare ?? q.predicted_fare ?? 0),
+              origin: finalOrigin,
+              destination: destCity,
+            }))
+            .filter((q) => q.predictedFare > 0)
+            .sort((a, b) => a.predictedFare - b.predictedFare)
+            .slice(0, 3);
+
+          setFlights(formatted);
+        } else {
+          setFlights([]);
         }
       } catch (err) {
-        console.error(err);
-        setError("Could not load flight predictions.");
+        console.error("Flight ML microservice prediction error:", err);
+        setError("Flight prediction is unavailable for this route.");
       } finally {
         setLoading(false);
       }
     }
-    loadFlights();
-  }, [itinerary]);
 
-  if (loading) return <div className="text-sm text-slate-500 mb-6 mt-6">Loading flight predictions...</div>;
+    loadFlights();
+  }, [itinerary, location.state]);
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 mb-8 mt-6">
+        <div className="flex items-center gap-3 text-slate-600">
+          <Loader2 className="w-5 h-5 animate-spin text-[#2563EB]" />
+          <span className="text-sm font-medium">
+            Fetching ML flight fare predictions for {routeInfo.origin} → {routeInfo.destination}...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   if (error || flights.length === 0) return null;
 
   return (
-    <div className="mb-6 mt-6">
-      <h2 className="text-xl font-bold mb-3">Predicted Flights (Top Fares)</h2>
-      <div className="grid gap-4 md:grid-cols-2">
-        {flights.map((flight, i) => (
-          <div key={i} className="rounded-xl border border-slate-200 overflow-hidden flex bg-white shadow-sm hover:shadow transition-shadow">
-            <div className="w-2/5 bg-slate-50 flex items-center justify-center p-2 border-r border-slate-100">
-              <img src="/indigo.jpeg" alt="Flight" className="w-full h-auto object-contain mix-blend-multiply rounded-lg max-h-24" />
-            </div>
-            <div className="w-3/5 p-4 flex flex-col justify-center">
-              <p className="font-bold text-slate-800">{flight.airline}</p>
-              <p className="text-xs text-slate-500 mb-1">Flight #{flight.flight_number}</p>
-              <p className="text-xs font-medium text-slate-600 bg-slate-100 w-fit px-2 py-0.5 rounded">{flight.date} ({flight.day_of_week})</p>
-              <p className="font-bold text-[#2563EB] text-lg mt-2">₹{Math.round(flight.predicted_fare).toLocaleString()}</p>
-            </div>
+    <div className="mb-8 mt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 pb-2 border-b border-slate-100">
+        <div>
+          <div className="flex items-center gap-2">
+            <Plane className="w-5 h-5 text-[#2563EB]" />
+            <h2 className="text-xl font-bold text-slate-800">
+              Flight Fare Predictions: {routeInfo.origin} → {routeInfo.destination}
+            </h2>
           </div>
-        ))}
+          <p className="text-xs text-slate-500 mt-1">
+            Top 3 flight predictions powered by the ML flight fare microservice
+          </p>
+        </div>
+        <div className="mt-2 sm:mt-0">
+          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-[#2563EB] border border-blue-100">
+            Source: {routeInfo.origin} &bull; Dest: {routeInfo.destination}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        {flights.map((flight, index) => {
+          const airlineImg = getAirlineImage(flight.airline);
+          const isBest = index === 0;
+
+          return (
+            <div
+              key={index}
+              className={`relative rounded-2xl border ${
+                isBest ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"
+              } overflow-hidden flex flex-row bg-white shadow-sm hover:shadow-md transition-all duration-200`}
+            >
+              {isBest && (
+                <div className="absolute top-2 right-2 z-10">
+                  <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                    Best Fare
+                  </span>
+                </div>
+              )}
+
+              {/* Left Side: Flight Image */}
+              <div className="w-2/5 min-w-[120px] max-w-[140px] bg-slate-50 p-2 flex flex-col items-center justify-center border-r border-slate-100">
+                <img
+                  src={airlineImg}
+                  alt={flight.airline}
+                  className="w-full h-24 object-contain rounded-lg"
+                />
+                <span className="text-[11px] font-bold text-slate-600 mt-1.5 text-center">
+                  {flight.airline}
+                </span>
+              </div>
+
+              {/* Right Side: Flight Info */}
+              <div className="w-3/5 p-3.5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                    <span className="text-slate-800">{flight.origin}</span>
+                    <span>&rarr;</span>
+                    <span className="text-slate-800">{flight.destination}</span>
+                  </div>
+
+                  <p className="text-xs font-semibold text-slate-700 mt-0.5">
+                    Flight #{flight.flightNumber}
+                  </p>
+
+                  <div className="mt-1.5 inline-block bg-slate-100 text-slate-600 text-[10px] font-medium px-2 py-0.5 rounded">
+                    {flight.date} {flight.dayOfWeek ? `(${flight.dayOfWeek})` : ""}
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-slate-100">
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                    Predicted Fare
+                  </div>
+                  <div className="text-lg font-extrabold text-[#2563EB]">
+                    ₹{Math.round(flight.predictedFare).toLocaleString("en-IN")}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

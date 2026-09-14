@@ -170,5 +170,10 @@ export function parsePlanTripSearch(search) {
   }
 
   const { fromCity, ...apiPayload } = parsed.data;
-  return { success: true, error: "", payload: apiPayload, fromCity };
+  return {
+    success: true,
+    error: "",
+    payload: { ...apiPayload, fromCity, origin: fromCity },
+    fromCity,
+  };
 }

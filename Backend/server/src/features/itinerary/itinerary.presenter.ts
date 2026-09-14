@@ -17,6 +17,8 @@ export function presentItinerary(row: any) {
         id: row.id,
         title: row.title || data.title,
         destination: data.destination || row.destination,
+        origin: data.origin || row.origin || row.userAnswers?.origin || row.userAnswers?.fromCity || (data.transport && data.transport[0]?.from) || undefined,
+        fromCity: data.fromCity || row.fromCity || row.userAnswers?.fromCity || row.userAnswers?.origin || undefined,
         startDate,
         endDate,
         totalDays: Number(data.totalDays || row.totalDays) || undefined,
