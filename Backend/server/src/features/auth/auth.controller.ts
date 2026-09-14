@@ -19,6 +19,7 @@ function cookieOptions(maxAge: number) {
         httpOnly: true,
         secure: env.NODE_ENV === "production",
         sameSite: env.NODE_ENV === "production" ? ("none" as const) : ("lax" as const),
+        partitioned: env.NODE_ENV === "production",
         maxAge,
         path: "/",
     };
@@ -34,6 +35,7 @@ function clearAuthCookies(res: Response): void {
         httpOnly: true,
         secure: env.NODE_ENV === "production",
         sameSite: env.NODE_ENV === "production" ? ("none" as const) : ("lax" as const),
+        partitioned: env.NODE_ENV === "production",
         path: "/",
     };
 

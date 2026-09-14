@@ -145,7 +145,7 @@ export default function MyBookingsPage() {
                 return (
                   <Link
                     key={item.id}
-                    to={`/plan/${item.id}`}
+                    to={`/plan/itinerary/${item.id}`}
                     className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between hover:border-blue-200 hover:shadow-md transition-all"
                   >
                     <div className="flex-1 min-w-0">
