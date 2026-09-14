@@ -160,27 +160,27 @@ export function getBookingPlatforms({
   // read, and land on the official book page with cities in the path when possible.
   const indigoUrl = hasDepart
     ? withQuery("https://www.goindigo.in/", {
-        orig: from.iata,
-        dest: to.iata,
-        dd1: formatIsoDate(depart),
-        ...(isRound ? { dd2: formatIsoDate(ret) } : {}),
-        adults: String(pax),
-        tripType: isRound ? "R" : "O",
-      })
+      orig: from.iata,
+      dest: to.iata,
+      dd1: formatIsoDate(depart),
+      ...(isRound ? { dd2: formatIsoDate(ret) } : {}),
+      adults: String(pax),
+      tripType: isRound ? "R" : "O",
+    })
     : "https://www.goindigo.in/";
 
   const airIndiaUrl = hasAir
     ? withQuery(
-        `https://www.airindia.com/en-in/book-flights/${from.label.toLowerCase()}-to-${to.label.toLowerCase()}-flights`,
-        {
-          origin: from.iata,
-          destination: to.iata,
-          ...(depart ? { departureDate: formatIsoDate(depart) } : {}),
-          ...(isRound ? { returnDate: formatIsoDate(ret) } : {}),
-          adults: String(pax),
-          tripType: isRound ? "RT" : "OW",
-        },
-      )
+      `https://www.airindia.com/en-in/book-flights/${from.label.toLowerCase()}-to-${to.label.toLowerCase()}-flights`,
+      {
+        origin: from.iata,
+        destination: to.iata,
+        ...(depart ? { departureDate: formatIsoDate(depart) } : {}),
+        ...(isRound ? { returnDate: formatIsoDate(ret) } : {}),
+        adults: String(pax),
+        tripType: isRound ? "RT" : "OW",
+      },
+    )
     : "https://www.airindia.com/en-in/book-flights";
 
   const railYatriUrl = (() => {
@@ -211,10 +211,10 @@ export function getBookingPlatforms({
 
   const abhiBusUrl = hasBus
     ? withQuery("https://www.abhibus.com/", {
-        from: from.label,
-        to: to.label,
-        ...(depart ? { doj: formatIsoDate(depart) } : {}),
-      })
+      from: from.label,
+      to: to.label,
+      ...(depart ? { doj: formatIsoDate(depart) } : {}),
+    })
     : "https://www.abhibus.com/";
 
   return [
@@ -228,22 +228,22 @@ export function getBookingPlatforms({
         { name: "EaseMyTrip", color: "#FF6D00", url: emtUrl },
       ],
     },
-    {
-      category: "Trains",
-      icon: "🚆",
-      links: [
-        // IRCTC blocks third-party prefill. Search form is the official book page.
-        { name: "IRCTC", color: "#1A4B8C", url: "https://www.irctc.co.in/nget/train-search" },
-        { name: "RailYatri", color: "#E54B4B", url: railYatriUrl },
-      ],
-    },
-    {
-      category: "Buses",
-      icon: "🚌",
-      links: [
-        { name: "redBus", color: "#D84E43", url: redbusUrl },
-        { name: "AbhiBus", color: "#2E7D32", url: abhiBusUrl },
-      ],
-    },
+    // {
+    //   category: "Trains",
+    //   icon: "🚆",
+    //   links: [
+    //     // IRCTC blocks third-party prefill. Search form is the official book page.
+    //     { name: "IRCTC", color: "#1A4B8C", url: "https://www.irctc.co.in/nget/train-search" },
+    //     { name: "RailYatri", color: "#E54B4B", url: railYatriUrl },
+    //   ],
+    // },
+    // {
+    //   category: "Buses",
+    //   icon: "🚌",
+    //   links: [
+    //     { name: "redBus", color: "#D84E43", url: redbusUrl },
+    //     { name: "AbhiBus", color: "#2E7D32", url: abhiBusUrl },
+    //   ],
+    // },
   ];
 }

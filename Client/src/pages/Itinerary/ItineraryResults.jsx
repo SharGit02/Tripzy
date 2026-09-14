@@ -515,21 +515,19 @@ export default function ItineraryResults({
 
         <FlightPredictions itinerary={itinerary} source={sourceCity} />
 
-        <h2 className="text-xl font-bold mt-6 mb-3">
-          Budget Estimate
-        </h2>
+      
         {/* ── Digital Receipt ── */}
         {/* ── Digital Receipt ── */}
         <div className="flex justify-center mb-10 mt-6">
           <div
             style={{ backgroundColor: "#f9f7f1", fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-            className="w-full max-w-[400px] shadow-xl p-8 text-[#1a1a1a] relative"
+            className="w-full  shadow-xl p-8 text-[#1a1a1a] relative"
           >
             {/* Top jagged edge effect (optional but nice for receipt, using CSS mask or simple border) */}
             <div className="absolute top-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'top -5px left 0' }}></div>
             
             <h3 className="text-center text-4xl font-black uppercase tracking-tighter mb-8" style={{ fontFamily: 'Inter, sans-serif' }}>
-              Estimate
+              Total Estimate
             </h3>
 
             <div className="text-xs font-bold mb-4 tracking-widest text-slate-500">
@@ -564,7 +562,7 @@ export default function ItineraryResults({
             </div>
 
             <div className="mt-12 flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              <span>@TRIPZEE</span>
+              <span>Detailed breakdown</span>
               <span>{itinerary.totalDays} DAYS</span>
             </div>
             
@@ -853,7 +851,7 @@ function BookingLinks({ origin, destination, startDate, endDate, adults }) {
             <p className="font-semibold text-sm text-slate-700 mb-3">
               {group.icon} {group.category}
             </p>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-row gap-2">
               {group.links.map((platform) => (
                 <a
                   key={platform.name}
