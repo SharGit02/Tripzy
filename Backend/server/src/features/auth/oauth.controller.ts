@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import { env } from "../../config/env.js";
 import { userRepository } from "../users/user.repository.js";
 import { authService } from "../../services/auth.service.js";
@@ -108,17 +109,8 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
             }
         }
 
-        const payload = {
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-        };
-
-        const accessToken = authService.generateAccessToken(payload);
-        const refreshToken = authService.generateRefreshToken(payload);
-        setAuthCookies(res, accessToken, refreshToken);
-
-        res.redirect(`${frontendUrl}/dashboard`);
+        const tempToken = jwt.sign({ userId: user.id, type: "oauth_exchange" }, env.JWT_SECRET, { expiresIn: "1m" });
+        res.redirect(`${frontendUrl}/dashboard?exchange_token=${tempToken}`);
     } catch (err) {
         console.error("[GOOGLE OAUTH ERROR]", err);
         const errorMsg = err instanceof Error ? err.message : "Failed to sign in with Google.";
@@ -230,20 +222,43 @@ export async function githubCallback(req: Request, res: Response): Promise<void>
             }
         }
 
-        const payload = {
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-        };
-
-        const accessToken = authService.generateAccessToken(payload);
-        const refreshToken = authService.generateRefreshToken(payload);
-        setAuthCookies(res, accessToken, refreshToken);
-
-        res.redirect(`${frontendUrl}/dashboard`);
+        const tempToken = jwt.sign({ userId: user.id, type: "oauth_exchange" }, env.JWT_SECRET, { expiresIn: "1m" });
+        res.redirect(`${frontendUrl}/dashboard?exchange_token=${tempToken}`);
     } catch (err) {
         console.error("[GITHUB OAUTH ERROR]", err);
         const errorMsg = err instanceof Error ? err.message : "Failed to sign in with GitHub.";
         res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(errorMsg)}`);
+    }
+}
+
+export async function oauthExchange(req: Request, res: Response): Promise<void> {
+    const { token } = req.body;
+    if (!token) {
+        res.status(400).json({ message: "Exchange token required" });
+        return;
+    }
+    try {
+        const payload = jwt.verify(token, env.JWT_SECRET) as any;
+        if (payload.type !== "oauth_exchange") {
+            res.status(401).json({ message: "Invalid token type" });
+            return;
+        }
+
+        const user = await userRepository.findById(payload.userId);
+        if (!user) {
+            res.status(404).json({ message: "User not found" });
+            return;
+        }
+
+        const newPayload = { userId: user.id, email: user.email, role: user.role };
+        const accessToken = authService.generateAccessToken(newPayload);
+        const refreshToken = authService.generateRefreshToken(newPayload);
+        setAuthCookies(res, accessToken, refreshToken);
+
+        res.status(200).json({
+            user: { id: user.id, name: user.name, email: user.email, role: user.role }
+        });
+    } catch (err) {
+        res.status(401).json({ message: "Invalid or expired exchange token" });
     }
 }

@@ -9,7 +9,8 @@ import { loginUser, signupUser } from "../../lib/authApi";
 
 export default function AuthModal({ defaultTab = "login", onClose }) {
   const getOAuthUrl = (provider) => {
-    const baseUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+    const isProd = import.meta.env.MODE === "production";
+    const baseUrl = isProd ? "" : (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "");
     return `${baseUrl}/api/auth/${provider}`;
   };
   const [tab, setTab] = useState(defaultTab);
