@@ -143,6 +143,10 @@ export default function PriceHistoryGraph({ itinerary, sourceCity }) {
               tickLine={false} 
               tickFormatter={formatCurrency}
               tick={{ fontSize: 12, fill: "#64748b" }}
+              domain={[
+                (dataMin) => Math.max(0, Math.floor(dataMin - (dataMin * 0.02))), 
+                (dataMax) => Math.ceil(dataMax + (dataMax * 0.02))
+              ]}
             />
             <Tooltip 
               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
