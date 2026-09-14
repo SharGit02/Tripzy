@@ -22,6 +22,7 @@ import ItineraryMap from "./ItineraryMap";
 import { fetchFlightFarePrediction } from "../../lib/authApi";
 import { getBookingPlatforms } from "./bookingLinks";
 import PlaceTicketCard from "../../components/itinerary/PlaceTicketCard";
+import PriceHistoryGraph from "../../components/itinerary/PriceHistoryGraph";
 
 function formatTime12Hour(timeStr) {
   if (!timeStr) return "";
@@ -328,7 +329,7 @@ function FlightPredictions({ itinerary, source }) {
                 />
 
                 {/* Brand SVG logo — pinned bottom-left over gradient */}
-                <div className="absolute bottom-2.5 left-3 z-10">
+                <div className="absolute bottom-2.5 left-3 z-10 w-24 h-8 flex items-center justify-start">
                     <img
                       src={airlineLogo}
                       alt={flight.airline}
@@ -514,6 +515,8 @@ export default function ItineraryResults({
         />
 
         <FlightPredictions itinerary={itinerary} source={sourceCity} />
+
+        <PriceHistoryGraph itinerary={itinerary} sourceCity={sourceCity} />
 
       
         {/* ── Digital Receipt ── */}
@@ -851,14 +854,14 @@ function BookingLinks({ origin, destination, startDate, endDate, adults }) {
             <p className="font-semibold text-sm text-slate-700 mb-3">
               {group.icon} {group.category}
             </p>
-            <div className="flex flex-row gap-2">
+            <div className="flex flex-row flex-wrap gap-2">
               {group.links.map((platform) => (
                 <a
                   key={platform.name}
                   href={platform.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 whitespace-nowrap"
                   style={{ backgroundColor: platform.color }}
                 >
                   {platform.name}

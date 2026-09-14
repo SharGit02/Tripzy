@@ -111,7 +111,7 @@ export default function GeneratingItineraryPage() {
           )}
         </main>
       </div>
-      <Footer />
+   
     </div>
   );
 }
