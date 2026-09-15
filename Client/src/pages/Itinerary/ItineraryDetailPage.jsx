@@ -138,9 +138,7 @@ export default function ItineraryDetailPage() {
         alert("Itinerary ID not available.");
         return;
       }
-      const response = await emailItineraryPdf(id);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Failed to email PDF.");
+      await emailItineraryPdf(id);
       alert("Itinerary sent to your email!");
     } catch (err) {
       alert("Failed to email PDF: " + (err instanceof Error ? err.message : "Unknown error"));
