@@ -519,296 +519,318 @@ export default function ItineraryResults({
     "Delhi";
 
   return (
-    
-    <div className="rounded-sm bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-200 p-8 mb-8">
-      <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-extrabold">{itinerary.destination} Itinerary</h1>
-          <p className="text-[#386FA4]">
-            {formatDate(itinerary.startDate)} - {formatDate(itinerary.endDate)} · {itinerary.totalDays} days
-          </p>
-        </div>
-        <span className="rounded-full bg-green-100 text-green-700 px-3 py-1 text-sm font-semibold">
-          Ready
-        </span>
-      </div>
+    <>
+      <div className="relative mb-8 bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] overflow-hidden">
+      {/* Left zig-zag edge */}
+      <div
+        className="absolute left-0 top-0 bottom-0 w-3 z-20 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(135deg, white 50%, transparent 50%) 0 0 / 12px 12px repeat-y",
+        }}
+      />
 
-      <div className="prose prose-slate max-w-none">
-        <h2 className="text-xl font-bold mb-3">Overview</h2>
-        <p className="text-slate-600">{itinerary.overview}</p>
+      {/* Right zig-zag edge */}
+      <div
+        className="absolute right-0 top-0 bottom-0 w-3 z-20 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(225deg, white 50%, transparent 50%) 0 0 / 12px 12px repeat-y",
+        }}
+      />
 
-        <ItineraryMap
-          source={sourceCity}
-          destination={itinerary.destination}
-          places={placesToVisit}
-        />
-
-        <FlightPredictions itinerary={itinerary} source={sourceCity} />
-
-        <PriceHistoryGraph itinerary={itinerary} sourceCity={sourceCity} />
-
-      
-        {/* ── Digital Receipt ── */}
-        {/* ── Digital Receipt ── */}
-        <div className="flex justify-center mb-10 mt-6">
-          <div
-            style={{ backgroundColor: "#f9f7f1", fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-            className="w-full  shadow-xl p-8 text-[#1a1a1a] relative"
-          >
-            {/* Top jagged edge effect (optional but nice for receipt, using CSS mask or simple border) */}
-            <div className="absolute top-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'top -5px left 0' }}></div>
-            
-            <h3 className="text-center text-4xl font-black uppercase tracking-tighter mb-8" style={{ fontFamily: 'Inter, sans-serif' }}>
-              Total Estimate
-            </h3>
-
-            <div className="text-xs font-bold mb-4 tracking-widest text-slate-500">
-              TRIP BREAKDOWN
-            </div>
-
-            <div className="space-y-3">
-              {[
-                { label: "ACCOMMODATION", key: "accommodation" },
-                { label: "FOOD & DINING",  key: "food" },
-                { label: "TRANSPORT",      key: "transport" },
-                { label: "ACTIVITIES",     key: "activities" },
-                { label: "MISCELLANEOUS",  key: "miscellaneous" },
-              ].map(({ label, key }) => {
-                const value = budgetBreakdown?.[key] ?? 0;
-                if (value === 0) return null; // Don't show 0 value items if we want cleaner look, but up to us.
-                return (
-                  <div key={key} className="flex items-end text-sm">
-                    <span className="shrink-0 font-medium">{label}</span>
-                    <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50"></span>
-                    <span className="shrink-0 font-bold tabular-nums">
-                      {formatCurrency(value)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-8 pt-4 border-t-2 border-slate-800 flex justify-between items-end">
-              <span className="font-bold uppercase tracking-wider text-sm">Total Estimate</span>
-              <span className="text-xl font-bold tabular-nums">{formatCurrency(budgetBreakdown?.total)}</span>
-            </div>
-
-            <div className="mt-12 flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              <span>Detailed breakdown</span>
-              <span>{itinerary.totalDays} DAYS</span>
-            </div>
-            
-             <div className="absolute bottom-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'bottom -5px left 0', transform: 'rotate(180deg)' }}></div>
+      {/* Main content */}
+      <div className="px-8 py-8 sm:px-10">
+        <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-extrabold">{itinerary.destination} Itinerary</h1>
+            <p className="text-[#386FA4]">
+              {formatDate(itinerary.startDate)} - {formatDate(itinerary.endDate)} · {itinerary.totalDays} days
+            </p>
           </div>
+          <span className="rounded-full bg-green-100 text-green-700 px-3 py-1 text-sm font-semibold">
+            Ready
+          </span>
         </div>
 
+        <div className="prose prose-slate max-w-none">
+          <h2 className="text-xl font-bold mb-3">Overview</h2>
+          <p className="text-slate-600">{itinerary.overview}</p>
 
-        <h2 className="text-xl font-bold mb-3">Accommodations</h2>
-        <div className="space-y-3 mb-6">
-          {accommodations.map((acc, i) => (
-            <div key={i} className="rounded-xl border border-slate-200 p-4 flex items-center justify-between">
-              <div>
-                <p className="font-semibold">{acc.name}</p>
-                <p className="text-sm text-slate-500">
-                  {acc.type} · {acc.location} · ₹{Number(acc.pricePerNight || 0).toLocaleString()}/night
-                </p>
+          <ItineraryMap
+            source={sourceCity}
+            destination={itinerary.destination}
+            places={placesToVisit}
+          />
+
+          <FlightPredictions itinerary={itinerary} source={sourceCity} />
+
+          <PriceHistoryGraph itinerary={itinerary} sourceCity={sourceCity} />
+
+        
+          {/* ── Digital Receipt ── */}
+          {/* ── Digital Receipt ── */}
+          <div className="flex justify-center mb-10 mt-6">
+            <div
+              style={{ backgroundColor: "#f9f7f1", fontFamily: '"Roboto Mono", "Courier New", monospace' }}
+              className="w-full  shadow-xl p-8 text-[#1a1a1a] relative"
+            >
+              {/* Top jagged edge effect (optional but nice for receipt, using CSS mask or simple border) */}
+              <div className="absolute top-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'top -5px left 0' }}></div>
+              
+              <h3 className="text-center text-4xl font-black uppercase tracking-tighter mb-8" style={{ fontFamily: 'Inter, sans-serif' }}>
+                Total Estimate
+              </h3>
+
+              <div className="text-xs font-bold mb-4 tracking-widest text-slate-500">
+                TRIP BREAKDOWN
               </div>
-              <span className="text-[#2563EB] font-semibold">{acc.rating}★</span>
-            </div>
-          ))}
-        </div>
 
-        {/* Places to Visit Section */}
-        {placesToVisit.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Places to Visit</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Top attractions & highlights curated for {itinerary.destination || "your trip"}
-                </p>
+              <div className="space-y-3">
+                {[
+                  { label: "ACCOMMODATION", key: "accommodation" },
+                  { label: "FOOD & DINING",  key: "food" },
+                  { label: "TRANSPORT",      key: "transport" },
+                  { label: "ACTIVITIES",     key: "activities" },
+                  { label: "MISCELLANEOUS",  key: "miscellaneous" },
+                ].map(({ label, key }) => {
+                  const value = budgetBreakdown?.[key] ?? 0;
+                  if (value === 0) return null; // Don't show 0 value items if we want cleaner look, but up to us.
+                  return (
+                    <div key={key} className="flex items-end text-sm">
+                      <span className="shrink-0 font-medium">{label}</span>
+                      <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50"></span>
+                      <span className="shrink-0 font-bold tabular-nums">
+                        {formatCurrency(value)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-              <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full">
-                {placesToVisit.slice(0, 8).length} Attractions
-              </span>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {placesToVisit.slice(0, 8).map((place, i) => (
-                <PlaceTicketCard
-                  key={`${place.name}-${i}`}
-                  place={place}
-                  destination={itinerary.destination}
-                />
-              ))}
+              <div className="mt-8 pt-4 border-t-2 border-slate-800 flex justify-between items-end">
+                <span className="font-bold uppercase tracking-wider text-sm">Total Estimate</span>
+                <span className="text-xl font-bold tabular-nums">{formatCurrency(budgetBreakdown?.total)}</span>
+              </div>
+
+              <div className="mt-12 flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                <span>Detailed breakdown</span>
+                <span>{itinerary.totalDays} DAYS</span>
+              </div>
+              
+               <div className="absolute bottom-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'bottom -5px left 0', transform: 'rotate(180deg)' }}></div>
             </div>
           </div>
-        )}
 
-        <h2 className="text-xl font-bold mb-3">Day-by-Day Schedule</h2>
-        <div className="space-y-4">
-          {days.map((day) => (
-            <div key={day.day} className="rounded-xl border border-slate-200 overflow-hidden">
-              <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
-                <span className="font-semibold text-[#133C55]">
-                  Day {day.day} · {formatDate(day.date)}
+
+          <h2 className="text-xl font-bold mb-3">Accommodations</h2>
+          <div className="space-y-3 mb-6">
+            {accommodations.map((acc, i) => (
+              <div key={i} className="rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold">{acc.name}</p>
+                  <p className="text-sm text-slate-500">
+                    {acc.type} · {acc.location} · ₹{Number(acc.pricePerNight || 0).toLocaleString()}/night
+                  </p>
+                </div>
+                <span className="text-[#2563EB] font-semibold">{acc.rating}★</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Places to Visit Section */}
+          {placesToVisit.length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Places to Visit</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Top attractions & highlights curated for {itinerary.destination || "your trip"}
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full">
+                  {placesToVisit.slice(0, 8).length} Attractions
                 </span>
-                <div className="flex items-center gap-2">
-                  {day.theme && (
-                    <span className="text-sm text-[#2563EB] bg-[#EBF3FE] px-2 py-1 rounded">{day.theme}</span>
-                  )}
-                  {!readOnly && onSaveDays && editingDay !== day.day && (
-                    <button
-                      type="button"
-                      onClick={() => startDayEdit(day)}
-                      className="text-xs font-semibold text-slate-500 hover:text-[#2563EB] inline-flex items-center gap-1"
-                    >
-                      <Pencil size={13} /> Edit
-                    </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {placesToVisit.slice(0, 8).map((place, i) => (
+                  <PlaceTicketCard
+                    key={`${place.name}-${i}`}
+                    place={place}
+                    destination={itinerary.destination}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <h2 className="text-xl font-bold mb-3">Day-by-Day Schedule</h2>
+          <div className="space-y-4">
+            {days.map((day) => (
+              <div key={day.day} className="rounded-xl border border-slate-200 overflow-hidden">
+                <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
+                  <span className="font-semibold text-[#133C55]">
+                    Day {day.day} · {formatDate(day.date)}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {day.theme && (
+                      <span className="text-sm text-[#2563EB] bg-[#EBF3FE] px-2 py-1 rounded">{day.theme}</span>
+                    )}
+                    {!readOnly && onSaveDays && editingDay !== day.day && (
+                      <button
+                        type="button"
+                        onClick={() => startDayEdit(day)}
+                        className="text-xs font-semibold text-slate-500 hover:text-[#2563EB] inline-flex items-center gap-1"
+                      >
+                        <Pencil size={13} /> Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="p-4 space-y-2">
+                  {editingDay === day.day ? (
+                    <div className="space-y-3">
+                      {draftActivities.map((activity, i) => (
+                        <div key={i} className="grid gap-2 sm:grid-cols-12 items-start">
+                          <input
+                            value={activity.time || ""}
+                            onChange={(e) => {
+                              const next = [...draftActivities];
+                              next[i] = { ...next[i], time: e.target.value };
+                              setDraftActivities(next);
+                            }}
+                            className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                            placeholder="09:00"
+                          />
+                          <input
+                            value={activity.type || ""}
+                            onChange={(e) => {
+                              const next = [...draftActivities];
+                              next[i] = { ...next[i], type: e.target.value };
+                              setDraftActivities(next);
+                            }}
+                            className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                            placeholder="type"
+                          />
+                          <input
+                            value={activity.title || ""}
+                            onChange={(e) => {
+                              const next = [...draftActivities];
+                              next[i] = { ...next[i], title: e.target.value };
+                              setDraftActivities(next);
+                            }}
+                            className="sm:col-span-5 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                            placeholder="Activity title"
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            value={activity.cost || ""}
+                            onChange={(e) => {
+                              const next = [...draftActivities];
+                              next[i] = { ...next[i], cost: Number(e.target.value) || 0 };
+                              setDraftActivities(next);
+                            }}
+                            className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                            placeholder="₹"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setDraftActivities(draftActivities.filter((_, idx) => idx !== i))}
+                            className="sm:col-span-1 text-xs text-red-600 font-semibold"
+                          >
+                            Remove
+                          </button>
+                          <textarea
+                            value={activity.description || ""}
+                            onChange={(e) => {
+                              const next = [...draftActivities];
+                              next[i] = { ...next[i], description: e.target.value };
+                              setDraftActivities(next);
+                            }}
+                            className="sm:col-span-12 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                            rows={2}
+                            placeholder="Notes"
+                          />
+                        </div>
+                      ))}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDraftActivities([...draftActivities, emptyActivity()])}
+                          className="text-sm font-semibold text-[#2563EB]"
+                        >
+                          Add activity
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveDayEdit}
+                          disabled={savingDays}
+                          className="rounded-lg bg-[#2563EB] text-white text-sm font-semibold px-3 py-1.5 disabled:opacity-60"
+                        >
+                          {savingDays ? "Saving..." : "Save day"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingDay(null)}
+                          className="text-sm font-semibold text-slate-500"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    (day.activities || []).map((activity, i) => (
+                      <div key={i} className="flex items-start gap-3 text-sm py-1 border-b border-slate-50 last:border-0">
+                        <div className="flex items-center gap-2 w-28 flex-shrink-0">
+                          {getActivityIcon(activity.type, activity.title)}
+                          <span className="text-slate-500 font-medium whitespace-nowrap">{formatTime12Hour(activity.time)}</span>
+                        </div>
+                        <span className="rounded px-2 py-0.5 bg-[#EBF3FE] text-[#1D4ED8] text-xs font-medium capitalize">
+                          {activity.type}
+                        </span>
+                        <span className="text-[#133C55]">{activity.title}</span>
+                        {activity.description && <span className="text-slate-500">- {activity.description}</span>}
+                        {activity.cost ? (
+                          <span className="text-[#2563EB] font-semibold ml-auto">
+                            ₹{activity.cost.toLocaleString()}
+                          </span>
+                        ) : null}
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
-              <div className="p-4 space-y-2">
-                {editingDay === day.day ? (
-                  <div className="space-y-3">
-                    {draftActivities.map((activity, i) => (
-                      <div key={i} className="grid gap-2 sm:grid-cols-12 items-start">
-                        <input
-                          value={activity.time || ""}
-                          onChange={(e) => {
-                            const next = [...draftActivities];
-                            next[i] = { ...next[i], time: e.target.value };
-                            setDraftActivities(next);
-                          }}
-                          className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                          placeholder="09:00"
-                        />
-                        <input
-                          value={activity.type || ""}
-                          onChange={(e) => {
-                            const next = [...draftActivities];
-                            next[i] = { ...next[i], type: e.target.value };
-                            setDraftActivities(next);
-                          }}
-                          className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                          placeholder="type"
-                        />
-                        <input
-                          value={activity.title || ""}
-                          onChange={(e) => {
-                            const next = [...draftActivities];
-                            next[i] = { ...next[i], title: e.target.value };
-                            setDraftActivities(next);
-                          }}
-                          className="sm:col-span-5 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                          placeholder="Activity title"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          value={activity.cost || ""}
-                          onChange={(e) => {
-                            const next = [...draftActivities];
-                            next[i] = { ...next[i], cost: Number(e.target.value) || 0 };
-                            setDraftActivities(next);
-                          }}
-                          className="sm:col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                          placeholder="₹"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setDraftActivities(draftActivities.filter((_, idx) => idx !== i))}
-                          className="sm:col-span-1 text-xs text-red-600 font-semibold"
-                        >
-                          Remove
-                        </button>
-                        <textarea
-                          value={activity.description || ""}
-                          onChange={(e) => {
-                            const next = [...draftActivities];
-                            next[i] = { ...next[i], description: e.target.value };
-                            setDraftActivities(next);
-                          }}
-                          className="sm:col-span-12 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                          rows={2}
-                          placeholder="Notes"
-                        />
-                      </div>
-                    ))}
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setDraftActivities([...draftActivities, emptyActivity()])}
-                        className="text-sm font-semibold text-[#2563EB]"
-                      >
-                        Add activity
-                      </button>
-                      <button
-                        type="button"
-                        onClick={saveDayEdit}
-                        disabled={savingDays}
-                        className="rounded-lg bg-[#2563EB] text-white text-sm font-semibold px-3 py-1.5 disabled:opacity-60"
-                      >
-                        {savingDays ? "Saving..." : "Save day"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingDay(null)}
-                        className="text-sm font-semibold text-slate-500"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  (day.activities || []).map((activity, i) => (
-                    <div key={i} className="flex items-start gap-3 text-sm py-1 border-b border-slate-50 last:border-0">
-                      <div className="flex items-center gap-2 w-28 flex-shrink-0">
-                        {getActivityIcon(activity.type, activity.title)}
-                        <span className="text-slate-500 font-medium whitespace-nowrap">{formatTime12Hour(activity.time)}</span>
-                      </div>
-                      <span className="rounded px-2 py-0.5 bg-[#EBF3FE] text-[#1D4ED8] text-xs font-medium capitalize">
-                        {activity.type}
-                      </span>
-                      <span className="text-[#133C55]">{activity.title}</span>
-                      {activity.description && <span className="text-slate-500">- {activity.description}</span>}
-                      {activity.cost ? (
-                        <span className="text-[#2563EB] font-semibold ml-auto">
-                          ₹{activity.cost.toLocaleString()}
-                        </span>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          <h2 className="text-xl font-bold mt-6 mb-3">Tips</h2>
+          <ul className="space-y-2">
+            {tips.map((tip, i) => (
+              <li key={i} className="flex items-start gap-2 text-slate-600">
+                <CheckCircle size={16} className="text-green-500 mt-1 flex-shrink-0" />
+                {tip}
+              </li>
+            ))}
+          </ul>
+
+          {/* ── External Booking Links ── */}
+          <BookingLinks
+            origin={sourceCity}
+            destination={itinerary.destination}
+            startDate={itinerary.startDate}
+            endDate={itinerary.endDate}
+            adults={
+              itinerary.adults ||
+              itinerary.groupSize?.adults ||
+              itinerary.userAnswers?.adults ||
+              1
+            }
+          />
         </div>
-
-        <h2 className="text-xl font-bold mt-6 mb-3">Tips</h2>
-        <ul className="space-y-2">
-          {tips.map((tip, i) => (
-            <li key={i} className="flex items-start gap-2 text-slate-600">
-              <CheckCircle size={16} className="text-green-500 mt-1 flex-shrink-0" />
-              {tip}
-            </li>
-          ))}
-        </ul>
-
-        {/* ── External Booking Links ── */}
-        <BookingLinks
-          origin={sourceCity}
-          destination={itinerary.destination}
-          startDate={itinerary.startDate}
-          endDate={itinerary.endDate}
-          adults={
-            itinerary.adults ||
-            itinerary.groupSize?.adults ||
-            itinerary.userAnswers?.adults ||
-            1
-          }
-        />
       </div>
+    </div>
 
       <div className="mt-8 flex gap-3 flex-wrap">
         {onDownloadPdf && (
@@ -869,7 +891,7 @@ export default function ItineraryResults({
           Plan another trip
         </button>
       )}
-    </div>
+    </>
   );
 }
 
