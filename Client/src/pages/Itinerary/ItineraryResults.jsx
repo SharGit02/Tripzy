@@ -24,6 +24,7 @@ import { fetchFlightFarePrediction } from "../../lib/authApi";
 import { getBookingPlatforms } from "./bookingLinks";
 import PlaceTicketCard from "../../components/itinerary/PlaceTicketCard";
 import PriceHistoryGraph from "../../components/itinerary/PriceHistoryGraph";
+import TicketContainer from "../../components/itinerary/TicketContainer";
 
 function formatTime12Hour(timeStr) {
   if (!timeStr) return "";
@@ -520,30 +521,7 @@ export default function ItineraryResults({
 
   return (
     <>
-      <div className="relative mb-8 bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] overflow-hidden">
-      {/* Left saw-tooth ticket edge with border & shadow */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-4 z-20 pointer-events-none bg-repeat-y"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='24' viewBox='0 0 16 24'%3E%3Cpath d='M-1,-1 L14,12 L-1,25 Z' fill='%23F7F9FC' stroke='%23CBD5E1' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-          backgroundSize: "16px 24px",
-          filter: "drop-shadow(2px 0 3px rgba(0,0,0,0.06))",
-        }}
-      />
-
-      {/* Right saw-tooth ticket edge with border & shadow */}
-      <div
-        className="absolute right-0 top-0 bottom-0 w-4 z-20 pointer-events-none bg-repeat-y"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='24' viewBox='0 0 16 24'%3E%3Cpath d='M17,-1 L2,12 L17,25 Z' fill='%23F7F9FC' stroke='%23CBD5E1' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-          backgroundSize: "16px 24px",
-          backgroundPosition: "right top",
-          filter: "drop-shadow(-2px 0 3px rgba(0,0,0,0.06))",
-        }}
-      />
-
-      {/* Main content */}
-      <div className="px-6 sm:px-12 py-8">
+      <TicketContainer className="p-6 sm:p-10">
         <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-extrabold">{itinerary.destination} Itinerary</h1>
@@ -832,8 +810,7 @@ export default function ItineraryResults({
             }
           />
         </div>
-      </div>
-    </div>
+      </TicketContainer>
 
       <div className="mt-8 flex gap-3 flex-wrap">
         {onDownloadPdf && (
