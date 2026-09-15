@@ -134,7 +134,7 @@ export async function emailPdf(req: Request, res: Response): Promise<void> {
         }
 
         await resend.emails.send({
-            from: "Tripzy <onboarding@resend.dev>", // default verified sender
+            from: "Tripzy <hello@tripzy.varadraut.dev>", // using verified custom domain
             to: [userEmail],
             subject: `Your trip itinerary to ${saved.destination}`,
             text: `Hi there!\n\nAttached is your Tripzy itinerary for ${saved.destination}.\n\nHave a great trip!`,
