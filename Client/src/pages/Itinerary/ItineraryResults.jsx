@@ -523,19 +523,20 @@ export default function ItineraryResults({
       <div className="relative mb-8 bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] overflow-hidden">
       {/* Left zig-zag edge */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-3 z-20 pointer-events-none"
+        className="absolute left-0 top-0 bottom-0 w-3 z-20 pointer-events-none bg-repeat-y"
         style={{
-          background:
-            "linear-gradient(135deg, white 50%, transparent 50%) 0 0 / 12px 12px repeat-y",
+          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='16' viewBox='0 0 12 16'%3E%3Cpath d='M0 0 L12 8 L0 16 Z' fill='%23F7F9FC'/%3E%3C/svg%3E")`,
+          backgroundSize: "12px 16px",
         }}
       />
 
       {/* Right zig-zag edge */}
       <div
-        className="absolute right-0 top-0 bottom-0 w-3 z-20 pointer-events-none"
+        className="absolute right-0 top-0 bottom-0 w-3 z-20 pointer-events-none bg-repeat-y"
         style={{
-          background:
-            "linear-gradient(225deg, white 50%, transparent 50%) 0 0 / 12px 12px repeat-y",
+          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='16' viewBox='0 0 12 16'%3E%3Cpath d='M12 0 L0 8 L12 16 Z' fill='%23F7F9FC'/%3E%3C/svg%3E")`,
+          backgroundSize: "12px 16px",
+          backgroundPosition: "right top",
         }}
       />
 
