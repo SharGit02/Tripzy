@@ -16,7 +16,8 @@ import {
   Car,
   Plane,
   Bed,
-  Activity
+  Activity,
+  Mail
 } from "lucide-react";
 import ItineraryMap from "./ItineraryMap";
 import { fetchFlightFarePrediction } from "../../lib/authApi";
@@ -437,6 +438,7 @@ export default function ItineraryResults({
   error,
   readOnly = false,
   onDownloadPdf,
+  onEmailPdf,
   onRegenerate,
   onPlanAnother,
   onSaveDays,
@@ -816,6 +818,15 @@ export default function ItineraryResults({
             className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2"
           >
             <Download size={18} /> Download PDF
+          </button>
+        )}
+        {onEmailPdf && (
+          <button
+            type="button"
+            onClick={onEmailPdf}
+            className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2"
+          >
+            <Mail size={18} /> Email PDF
           </button>
         )}
         {onExportIcs && (

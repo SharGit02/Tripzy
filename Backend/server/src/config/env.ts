@@ -59,6 +59,7 @@ const envSchema = z
         GITHUB_CALLBACK_URL: z.string().trim().optional(),
 
         FRONTEND_URL: z.string().trim().optional(),
+        RESEND_API_KEY: z.string().trim().min(1).optional(),
     })
     .refine((data) => Boolean(data.DATABASE_URL || data.NEON_URI), {
         message: "DATABASE_URL or NEON_URI is required",
@@ -123,4 +124,6 @@ export const env = {
     GEMINI_API_KEYS: collectNumberedKeys("GEMINI_API_KEY"),
     // Model fallback chain (comma-separated, tried in order).
     GEMINI_MODEL_FALLBACKS: data.GEMINI_MODEL_FALLBACKS,
+
+    RESEND_API_KEY: data.RESEND_API_KEY,
 };

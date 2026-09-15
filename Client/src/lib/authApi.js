@@ -233,6 +233,12 @@ export async function downloadItineraryPdf(id) {
   return response;
 }
 
+export function emailItineraryPdf(id) {
+  return request(`/plan/${id}/email-pdf`, {
+    method: "POST",
+  });
+}
+
 export function regenerateItinerary(id, modifications) {
   return request(`/plan/${id}/regenerate`, {
     method: "POST",

@@ -9,6 +9,7 @@ import { downloadItineraryIcs } from "./itineraryToIcs";
 import {
   fetchItineraryById,
   downloadItineraryPdf,
+  emailItineraryPdf,
   regenerateItinerary,
   updateItinerary,
 } from "../../lib/authApi";
@@ -131,6 +132,21 @@ export default function ItineraryDetailPage() {
   }, [id]);
 
 
+  const handleEmailPdf = useCallback(async () => {
+    try {
+      if (!id) {
+        alert("Itinerary ID not available.");
+        return;
+      }
+      const response = await emailItineraryPdf(id);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Failed to email PDF.");
+      alert("Itinerary sent to your email!");
+    } catch (err) {
+      alert("Failed to email PDF: " + (err instanceof Error ? err.message : "Unknown error"));
+    }
+  }, [id]);
+
   return (
     <div className="min-h-screen bg-[#F7F9FC] text-[#133C55] flex flex-col justify-between">
       <div>
@@ -147,6 +163,7 @@ export default function ItineraryDetailPage() {
             itinerary={state.itinerary}
             error={state.error}
             onDownloadPdf={handleDownloadPdf}
+            onEmailPdf={handleEmailPdf}
             onRegenerate={() => setRegenerateOpen(true)}
             onPlanAnother={() => navigate("/plan")}
             onSaveDays={handleSaveDays}

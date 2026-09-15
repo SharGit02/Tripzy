@@ -98,6 +98,61 @@ export async function downloadPdf(req: Request, res: Response): Promise<void> {
     }
 }
 
+export async function emailPdf(req: Request, res: Response): Promise<void> {
+    try {
+        const id = itineraryIdParam(req);
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!id || !uuidPattern.test(id)) {
+            res.status(400).json({ message: "Invalid itinerary ID" });
+            return;
+        }
+
+        const saved = await itineraryService.getItinerary(id, req.user!.userId);
+        if (!saved) {
+            res.status(404).json({ message: "Itinerary not found" });
+            return;
+        }
+
+        const presented = presentItinerary(saved);
+        const pdfBuffer = await generateItineraryPdf(presented as any);
+
+        const filename = `${String(saved.destination).replace(/[^a-zA-Z0-9\-_]/g, "-")}-itinerary.pdf`;
+        
+        const { env } = await import("../../config/env.js");
+        if (!env.RESEND_API_KEY) {
+            res.status(503).json({ message: "Email service is not configured." });
+            return;
+        }
+
+        const { Resend } = await import("resend");
+        const resend = new Resend(env.RESEND_API_KEY);
+
+        const userEmail = req.user!.email;
+        if (!userEmail) {
+            res.status(400).json({ message: "User email not found in session." });
+            return;
+        }
+
+        await resend.emails.send({
+            from: "Tripzy <onboarding@resend.dev>", // default verified sender
+            to: [userEmail],
+            subject: `Your trip itinerary to ${saved.destination}`,
+            text: `Hi there!\n\nAttached is your Tripzy itinerary for ${saved.destination}.\n\nHave a great trip!`,
+            attachments: [
+                {
+                    filename,
+                    content: pdfBuffer,
+                },
+            ],
+        });
+
+        res.json({ message: "Itinerary sent to your email!" });
+    } catch (error) {
+        console.error("Email PDF error:", error);
+        res.status(500).json({ message: "Failed to email PDF" });
+    }
+}
+
 export async function listItineraries(req: Request, res: Response): Promise<void> {
     try {
         const limit = Math.min(Number(req.query.limit) || 20, 50);
