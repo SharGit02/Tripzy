@@ -1,0 +1,83 @@
+# Keeps a fork's default branch in step with the repo it was forked from.
+#
+# No checkout and no git: GitHub's own merge-upstream endpoint does the sync
+# server-side in one call, so a run is a couple of API requests rather than a
+# clone, a fetch and a push. It fast-forwards when it can and refuses rather
+# than inventing a merge commit when it can't.
+#
+# In the upstream repo itself this workflow does nothing — the first step reads
+# `.fork` and exits. That is deliberate: the file travels to every fork, where
+# it starts working without anyone editing it.
+name: Sync fork from upstream
+
+on:
+  schedule:
+    # Every 5 minutes — GitHub's floor for `schedule`. Treat it as best effort:
+    # scheduled runs are queued at low priority, routinely land late, and are
+    # dropped entirely under load. See the README note on repository_dispatch
+    # if you need the sync to be prompt rather than eventual.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# The fallback GITHUB_TOKEN needs this to move a branch. A PAT in SYNC_PAT
+# carries its own scopes and ignores it.
+permissions:
+  contents: write
+
+concurrency:
+  # Two syncs racing on one branch is pointless; let the running one finish.
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync default branch from upstream
+        env:
+          # SYNC_PAT is preferred: GITHUB_TOKEN cannot push to a protected
+          # branch, and commits it creates never trigger other workflows, so a
+          # synced fork would not run its own CI.
+          GH_TOKEN: ${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          read -r is_fork parent branch <<<"$(
+            gh api "repos/$REPO" --jq '[.fork, (.parent.full_name // "-"), .default_branch] | @tsv'
+          )"
+
+          if [ "$is_fork" != "true" ]; then
+            echo "::notice::$REPO is not a fork — nothing to sync."
+            echo "Not a fork. Skipped." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "Syncing \`$branch\` from \`$parent\`." >> "$GITHUB_STEP_SUMMARY"
+
+          set +e
+          result=$(gh api --method POST "repos/$REPO/merge-upstream" -f "branch=$branch" 2>&1)
+          code=$?
+          set -e
+
+          if [ $code -eq 0 ]; then
+            merge_type=$(printf '%s' "$result" | jq -r '.merge_type // "unknown"')
+            case "$merge_type" in
+              none) echo "Already up to date." >> "$GITHUB_STEP_SUMMARY" ;;
+              *)    echo "Synced ($merge_type)." >> "$GITHUB_STEP_SUMMARY" ;;
+            esac
+            exit 0
+          fi
+
+          # 409 means the fork has diverged in a way GitHub will not resolve on
+          # its own. Failing is the point: it needs a human, and a silent skip
+          # would let the fork drift indefinitely. Expect a run to fail every
+          # 5 minutes until it is resolved or this workflow is disabled.
+          if printf '%s' "$result" | grep -q "HTTP 409"; then
+            echo "::error::Cannot fast-forward $branch from $parent — resolve the divergence locally."
+            echo "**Conflict.** \`$branch\` has diverged from \`$parent\`; resolve it by hand." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "::error::merge-upstream failed: $result"
+          exit 1
