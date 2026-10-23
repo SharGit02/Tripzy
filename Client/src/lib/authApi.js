@@ -216,6 +216,15 @@ export function fetchRailFarePrediction(payload) {
   });
 }
 
+// Same deal as rail: not persisted server-side, the chosen bus lives in the
+// itinerary's selections instead.
+export function fetchBusFarePrediction(payload) {
+  return request("/bus-fare/predict", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchFlightFareHistory() {
   return request("/flight-fare/history");
 }
@@ -241,6 +250,74 @@ export function generateItinerary(payload) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+// Streams generation progress as Server-Sent Events. EventSource can't send a
+// POST body, so the response is read as a stream directly; `onProgress` fires
+// for every `{stage}` event, and the returned promise resolves with the final
+// `{stage:"done", itineraryId, itinerary, ...}` event, or rejects on a
+// `{stage:"error"}` event, a non-2xx response, or a network failure.
+export async function generateItineraryStream(payload, onProgress) {
+  const run = async (isRetry = false) => {
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/plan/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw toNetworkError(error);
+    }
+
+    if (response.status === 401 && !isRetry) {
+      const refreshed = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      }).catch(() => null);
+      if (refreshed?.ok) return run(true);
+    }
+
+    if (!response.ok || !response.body) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(toUserError("/plan/generate", response.status, data));
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalEvent = null;
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let sepIndex;
+      while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+        const chunk = buffer.slice(0, sepIndex);
+        buffer = buffer.slice(sepIndex + 2);
+        const dataLine = chunk.split("\n").find((line) => line.startsWith("data:"));
+        if (!dataLine) continue;
+
+        const event = JSON.parse(dataLine.slice(5).trim());
+        if (event.stage === "error") {
+          throw new Error(event.message || "Failed to generate itinerary. Please try again.");
+        }
+        if (event.stage === "done") finalEvent = event;
+        onProgress?.(event);
+      }
+    }
+
+    if (!finalEvent) {
+      throw new Error("The connection closed before the itinerary finished. Please try again.");
+    }
+    return finalEvent;
+  };
+
+  return run();
 }
 
 export function fetchItineraries(limit = 20, offset = 0) {

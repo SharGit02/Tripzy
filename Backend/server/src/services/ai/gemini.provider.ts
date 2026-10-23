@@ -75,6 +75,21 @@ function errorReason(body: unknown): string {
 }
 
 /**
+ * Sentinel `KeyFailure.reason` for "Google's servers are busy" — a 503 with
+ * status UNAVAILABLE, or message text to that effect. ai.service.ts matches on
+ * this exact string to skip the retry/model-fallback ladder and move straight
+ * to the NVIDIA provider, since no amount of Gemini retrying fixes an
+ * overloaded model and every retry just delays the user further.
+ */
+export const GEMINI_OVERLOAD_REASON = "model overloaded";
+
+const OVERLOAD_PATTERN = /overloaded|servers? (is|are) busy|high demand|try again later/i;
+
+function isOverloadFailure(status: number, reason: string, message: string): boolean {
+    return status === 503 && (reason === "UNAVAILABLE" || OVERLOAD_PATTERN.test(message));
+}
+
+/**
  * Maps a Gemini failure onto a waterfall gate decision.
  *
  * The important subtlety: Gemini reports a bad API key as HTTP **400**
@@ -126,6 +141,12 @@ export function classifyGeminiFailure(error: unknown): KeyFailure {
         }
 
         if (error.status >= 500) {
+            if (isOverloadFailure(error.status, reason, describeGeminiError(error.body))) {
+                // Still `transient` (another key may not be overloaded), but a
+                // short cooldown and the dedicated reason string so ai.service.ts
+                // can recognise it and stop spilling through retries/models.
+                return { kind: "transient", reason: GEMINI_OVERLOAD_REASON, cooldownMs: 1500 };
+            }
             return { kind: "transient", reason: `upstream ${error.status}` };
         }
 

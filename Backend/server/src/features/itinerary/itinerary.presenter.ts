@@ -31,6 +31,14 @@ export function presentItinerary(row: any) {
         status: row.status || data.status,
         currency: row.currency || data.currency || "INR",
         totalBudget: toNumber(row.totalBudget) ?? data.budgetBreakdown?.total,
+        weather: data.weather,
+        // Trip-tier signals from the original questionnaire (userAnswers), for
+        // transport-mode recommendations on the itinerary page (luxury trips
+        // nudged toward flights, budget trips toward the cheapest mode).
+        accommodationType: row.userAnswers?.accommodationType,
+        travelStyle: row.userAnswers?.travelStyle,
+        tripType: row.userAnswers?.tripType,
+        budget: row.userAnswers?.budget,
     };
 }
 

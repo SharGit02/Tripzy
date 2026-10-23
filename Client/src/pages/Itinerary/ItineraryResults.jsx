@@ -16,22 +16,28 @@ import {
   Car,
   Plane,
   TrainFront,
+  Bus,
   Bed,
   Activity,
   Mail,
   Star,
-  ExternalLink
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Sparkles
 } from "lucide-react";
 import ItineraryMap from "./ItineraryMap";
 import {
   fetchFlightFarePrediction,
   fetchRailFarePrediction,
+  fetchBusFarePrediction,
   saveItinerarySelections,
 } from "../../lib/authApi";
 import { safeHttpUrl } from "../../lib/safeUrl";
 import { getBookingPlatforms } from "./bookingLinks";
 import PlaceTicketCard from "../../components/itinerary/PlaceTicketCard";
 import PriceHistoryGraph from "../../components/itinerary/PriceHistoryGraph";
+import { useInView } from "../../hooks/useInView";
 import TicketContainer from "../../components/itinerary/TicketContainer";
 
 function formatTime12Hour(timeStr) {
@@ -184,7 +190,7 @@ function getFallbackFlights(origin, destination, dateStr) {
   ];
 }
 
-function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight, selectable }) {
+function FlightPredictions({ itinerary, source, date, direction = "outbound", isFlightSelected, onToggleFlight, selectable }) {
   const location = useLocation();
   const [flights, setFlights] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -203,30 +209,36 @@ function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight
       "Delhi";
 
     const rawDest = itinerary?.destination || "Goa";
-    const sourceCity = resolveAirportCity(rawOrigin, "Delhi");
-    const destCity = resolveAirportCity(rawDest, "Goa");
-    const finalOrigin =
-      sourceCity.toLowerCase() === destCity.toLowerCase()
-        ? destCity.toLowerCase() === "delhi"
-          ? "Mumbai"
-          : "Delhi"
-        : sourceCity;
+    let sourceCity = resolveAirportCity(rawOrigin, "Delhi");
+    let destCity = resolveAirportCity(rawDest, "Goa");
+    if (sourceCity.toLowerCase() === destCity.toLowerCase()) {
+      sourceCity = destCity.toLowerCase() === "delhi" ? "Mumbai" : "Delhi";
+    }
+    // The return leg flies the route backwards: destination becomes the
+    // departure point, the original source city is home.
+    const finalOrigin = direction === "return" ? destCity : sourceCity;
+    const finalDest = direction === "return" ? sourceCity : destCity;
 
-    setRouteInfo({ origin: finalOrigin, destination: destCity });
+    setRouteInfo({ origin: finalOrigin, destination: finalDest });
 
     async function loadFlights() {
       setLoading(true);
 
-      const startDateStr = itinerary?.startDate
+      const startDateStr = date
+        ? String(date).substring(0, 10)
+        : itinerary?.startDate
         ? String(itinerary.startDate).substring(0, 10)
         : new Date().toISOString().substring(0, 10);
 
       try {
         const data = await fetchFlightFarePrediction({
           origin: finalOrigin,
-          destination: destCity,
+          destination: finalDest,
           startDate: startDateStr,
-          windowDays: 7,
+          // Exactly the travel date, not a week-wide window: the traveler
+          // asked for the card's date to match the going/return date, not
+          // "somewhere in the next week".
+          windowDays: 1,
         });
 
         const quotes =
@@ -244,7 +256,7 @@ function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight
               dayOfWeek: q.dayOfWeek || q.day_of_week || "",
               predictedFare: Number(q.predictedFare ?? q.predicted_fare ?? 0),
               origin: finalOrigin,
-              destination: destCity,
+              destination: finalDest,
             }))
             .filter((q) => q.predictedFare > 0)
             .sort((a, b) => a.predictedFare - b.predictedFare);
@@ -279,18 +291,18 @@ function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight
 
           setFlights(diverseFlights);
         } else {
-          setFlights(getFallbackFlights(finalOrigin, destCity, startDateStr));
+          setFlights(getFallbackFlights(finalOrigin, finalDest, startDateStr));
         }
       } catch (err) {
         console.warn("Using fallback flight fare predictions:", err);
-        setFlights(getFallbackFlights(finalOrigin, destCity, startDateStr));
+        setFlights(getFallbackFlights(finalOrigin, finalDest, startDateStr));
       } finally {
         setLoading(false);
       }
     }
 
     loadFlights();
-  }, [itinerary, source, location.state]);
+  }, [itinerary, source, date, direction, location.state]);
 
   if (loading) {
     return (
@@ -334,12 +346,12 @@ function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight
           const airlineLogo = getAirlineLogo(flight.airline);
           const accent = getAirlineAccent(flight.airline);
           const isBest = index === 0;
-          const chosen = selectable && isFlightSelected?.(flight);
+          const chosen = selectable && isFlightSelected?.(flight, direction);
 
           return (
             <div
               key={index}
-              className={`relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 ${
+              className={`relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 ${
                 chosen
                   ? "ring-2 ring-[#2563EB] ring-offset-2"
                   : isBest
@@ -360,11 +372,11 @@ function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight
                 <label className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 shadow-md cursor-pointer">
                   <SelectBox
                     checked={Boolean(chosen)}
-                    onChange={() => onToggleFlight?.(flight)}
-                    label={`Include the ${flight.airline} flight ${flight.flightNumber} in my PDF`}
+                    onChange={() => onToggleFlight?.(flight, direction)}
+                    label={`Choose the ${flight.airline} flight ${flight.flightNumber} for this leg`}
                   />
                   <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
-                    {chosen ? "Added" : "Add"}
+                    {chosen ? "Chosen" : "Choose"}
                   </span>
                 </label>
               )}
@@ -398,7 +410,7 @@ function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight
                 <div className="absolute bottom-3 right-3 z-10">
                   <span
                     className="text-white text-[11px] font-bold tracking-wider px-2 py-0.5 rounded"
-                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
+                    style={{ background: "rgba(0,0,0,0.7)" }}
                   >
                     Flight: {flight.flightNumber}
                   </span>
@@ -452,39 +464,44 @@ function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight
  * is no train name, number, class or timing to show, and inventing one would
  * present a guess as a quote.
  *
- * Images are intentionally unset: drop a file path into RAIL_IMAGES and it
- * renders; until then every card shows a labelled placeholder carrying the same
- * alt text a real image would.
+ * No train identity means no real livery to key a specific photo on, so the
+ * photos in public/train-images are DECORATIVE: picked deterministically per
+ * card (stable across re-renders, varied across the cards shown), never
+ * presented as the train that actually runs that day. Nothing on the card
+ * names a service, so an arbitrary livery claims nothing. If a train listing
+ * ever lands, key the filename off its service name instead.
  */
-const RAIL_IMAGES = {
-  // Frequent Indian Railways liveries, reusable across every train sharing one.
-  vandeBharat: "",
-  rajdhani: "",
-  shatabdi: "",
-  duronto: "",
-  garibRath: "",
-  humsafar: "",
-  expressBlue: "",
-  passengerMemu: "",
-  toyTrain: "",
-  generic: "",
-};
+const GENERIC_RAIL_IMAGES = [
+  "/train-images/vandebharat.jpeg",
+  "/train-images/rajdhani.jpeg",
+  "/train-images/shatabdi.jpeg",
+  "/train-images/Humsafar.jpeg",
+  "/train-images/Duronto.jpeg",
+  "/train-images/Garib%20Rath.jpeg",
+  "/train-images/Express%20Blue.jpeg",
+  "/train-images/Passenger.jpeg",
+  "/train-images/toytrain.jpeg",
+  "/train-images/image3.jpg",
+  "/train-images/images.jpeg",
+  "/train-images/images2.jpeg",
+];
 
-// Fixed key for now: the model gives no train identity to key an image on.
-// ponytail: constant key, swap for a service-name -> livery lookup if train
-// listings are ever added.
-function railImageKey() {
-  return "generic";
+function railImageFor(quote) {
+  const hash = `${quote?.date || ""}${quote?.predictedFare || ""}`
+    .split("")
+    .reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  return GENERIC_RAIL_IMAGES[hash % GENERIC_RAIL_IMAGES.length];
 }
 
 function RailCard({ quote, index, selectable, chosen, onToggle }) {
-  const imageSrc = RAIL_IMAGES[railImageKey()];
+  const imageSrc = railImageFor(quote);
+  const [imgFailed, setImgFailed] = useState(false);
   const alt = `Indian Railways train from ${quote.origin} to ${quote.destination}`;
   const isBest = index === 0;
 
   return (
     <div
-      className={`relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 ${
+      className={`relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 ${
         chosen
           ? "ring-2 ring-[#2563EB] ring-offset-2"
           : isBest
@@ -495,7 +512,7 @@ function RailCard({ quote, index, selectable, chosen, onToggle }) {
       {isBest && (
         <div className="absolute top-3 left-3 z-20">
           <span className="bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md tracking-wide">
-            ✦ CHEAPEST DAY
+            ✦ BEST FARE
           </span>
         </div>
       )}
@@ -505,18 +522,24 @@ function RailCard({ quote, index, selectable, chosen, onToggle }) {
           <SelectBox
             checked={Boolean(chosen)}
             onChange={() => onToggle?.(quote)}
-            label={`Include the ${quote.date} train from ${quote.origin} to ${quote.destination} in my PDF`}
+            label={`Choose the ${quote.date} train from ${quote.origin} to ${quote.destination} for this leg`}
           />
           <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
-            {chosen ? "Added" : "Add"}
+            {chosen ? "Chosen" : "Choose"}
           </span>
         </label>
       )}
 
-      {/* Image slot — empty by design; the alt text carries the meaning. */}
+      {/* Decorative photo; falls back to a labelled icon if the file is missing. */}
       <div className="relative h-40 overflow-hidden bg-slate-100">
-        {imageSrc ? (
-          <img src={imageSrc} alt={alt} className="w-full h-full object-cover object-center" />
+        {!imgFailed ? (
+          <img
+            src={imageSrc}
+            alt={alt}
+            loading="lazy"
+            className="w-full h-full object-cover object-center"
+            onError={() => setImgFailed(true)}
+          />
         ) : (
           <div
             role="img"
@@ -560,12 +583,17 @@ function RailCard({ quote, index, selectable, chosen, onToggle }) {
   );
 }
 
-function RailPredictions({ itinerary, source, isTrainSelected, onToggleTrain, selectable }) {
+function RailPredictions({ itinerary, source, date, direction = "outbound", isTrainSelected, onToggleTrain, selectable }) {
   const [state, setState] = useState({ status: "loading", quotes: [], error: "" });
 
-  const origin = source || "Delhi";
-  const destination = itinerary?.destination || "";
-  const startDate = itinerary?.startDate
+  const sourceCity = source || "Delhi";
+  const destCity = itinerary?.destination || "";
+  // The return leg rides the route backwards, same as flights.
+  const origin = direction === "return" ? destCity : sourceCity;
+  const destination = direction === "return" ? sourceCity : destCity;
+  const startDate = date
+    ? String(date).substring(0, 10)
+    : itinerary?.startDate
     ? String(itinerary.startDate).substring(0, 10)
     : new Date().toISOString().substring(0, 10);
 
@@ -574,7 +602,9 @@ function RailPredictions({ itinerary, source, isTrainSelected, onToggleTrain, se
     let cancelled = false;
     setState({ status: "loading", quotes: [], error: "" });
 
-    fetchRailFarePrediction({ origin, destination, startDate, windowDays: 7 })
+    // Exactly the travel date, not a week-wide window: the rail model has no
+    // per-train identity, so this is one predicted fare for that one date.
+    fetchRailFarePrediction({ origin, destination, startDate, windowDays: 1 })
       .then((data) => {
         if (cancelled) return;
         const prediction = data?.prediction;
@@ -585,11 +615,7 @@ function RailPredictions({ itinerary, source, isTrainSelected, onToggleTrain, se
           dayOfWeek: quote.dayOfWeek,
           predictedFare: Number(quote.predictedFare),
         }));
-        // Cheapest three days of the window. No invented fallback, unlike
-        // flights: a made-up rail fare has no train to hang it on and would
-        // read as a real quote.
-        quotes.sort((a, b) => a.predictedFare - b.predictedFare || a.date.localeCompare(b.date));
-        setState({ status: "ready", quotes: quotes.slice(0, 3), error: "" });
+        setState({ status: "ready", quotes, error: "" });
       })
       .catch((error) => {
         if (cancelled) return;
@@ -614,13 +640,11 @@ function RailPredictions({ itinerary, source, isTrainSelected, onToggleTrain, se
           <div className="flex items-center gap-2">
             <TrainFront className="w-5 h-5 text-[#2563EB]" />
             <h2 className="text-xl font-bold text-slate-800">
-              Train Fare Predictions: {origin} → {destination}
+              Train Fare: {origin} → {destination}
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            {selectable
-              ? "Tick the day you want to travel and it will be included in your PDF"
-              : "Cheapest 3 travel dates in the week from your start date"}
+            {selectable ? "Choose this to travel by train for this leg" : `Predicted fare for ${startDate}`}
           </p>
         </div>
       </div>
@@ -654,13 +678,428 @@ function RailPredictions({ itinerary, source, isTrainSelected, onToggleTrain, se
               quote={quote}
               index={index}
               selectable={selectable}
-              chosen={selectable && isTrainSelected?.(quote)}
-              onToggle={onToggleTrain}
+              chosen={selectable && isTrainSelected?.(quote, direction)}
+              onToggle={(q) => onToggleTrain?.(q, direction)}
             />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Bus ─────────────────────────────────────────────────────────────────────
+ * Served by random_forest_bus_model.pkl via /api/bus-fare/predict. Same shape
+ * as rail: no operator/service identity, a card is a DATE not a service, and
+ * an unrecognised city degrades to a generic estimate rather than erroring
+ * (see bus_predictor.py) — so this, unlike rail, never shows an error card
+ * for an unknown city, only for a genuinely unreachable ML service.
+ */
+const GENERIC_BUS_IMAGES = ["/bus-images/bus1.jpg", "/bus-images/bus2.jpg", "/bus-images/bus3.jpg"];
+
+function busImageFor(quote) {
+  const hash = `${quote?.date || ""}${quote?.predictedFare || ""}`
+    .split("")
+    .reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  return GENERIC_BUS_IMAGES[hash % GENERIC_BUS_IMAGES.length];
+}
+
+function BusCard({ quote, index, selectable, chosen, onToggle }) {
+  const imageSrc = busImageFor(quote);
+  const [imgFailed, setImgFailed] = useState(false);
+  const alt = `Intercity bus from ${quote.origin} to ${quote.destination}`;
+  const isBest = index === 0;
+
+  return (
+    <div
+      className={`relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 ${
+        chosen
+          ? "ring-2 ring-[#2563EB] ring-offset-2"
+          : isBest
+          ? "ring-2 ring-amber-400 ring-offset-2"
+          : "border border-slate-200"
+      }`}
+    >
+      {isBest && (
+        <div className="absolute top-3 left-3 z-20">
+          <span className="bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md tracking-wide">
+            ✦ BEST FARE
+          </span>
+        </div>
+      )}
+
+      {selectable && (
+        <label className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 shadow-md cursor-pointer">
+          <SelectBox
+            checked={Boolean(chosen)}
+            onChange={() => onToggle?.(quote)}
+            label={`Choose the ${quote.date} bus from ${quote.origin} to ${quote.destination} for this leg`}
+          />
+          <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+            {chosen ? "Chosen" : "Choose"}
+          </span>
+        </label>
+      )}
+
+      <div className="relative h-40 overflow-hidden bg-slate-100">
+        {!imgFailed ? (
+          <img
+            src={imageSrc}
+            alt={alt}
+            loading="lazy"
+            className="w-full h-full object-cover object-center"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <div role="img" aria-label={alt} className="w-full h-full flex items-center justify-center text-slate-300">
+            <Bus size={44} aria-hidden="true" />
+          </div>
+        )}
+      </div>
+
+      <div className="px-4 pt-3 pb-4">
+        <div className="flex items-center gap-1.5 text-sm font-bold text-slate-800 mb-1">
+          <span className="truncate">{quote.origin}</span>
+          <span className="text-[#2563EB] text-base">→</span>
+          <span className="truncate">{quote.destination}</span>
+        </div>
+
+        <p className="text-[11px] text-slate-500 font-medium">
+          {quote.date}
+          {quote.dayOfWeek ? ` · ${quote.dayOfWeek}` : ""}
+        </p>
+
+        <div className="my-3 border-t border-dashed border-slate-200" />
+
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">Predicted Fare</p>
+            <p className="text-2xl font-extrabold text-amber-600">
+              ₹{Math.round(quote.predictedFare).toLocaleString("en-IN")}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-slate-400 italic">AI estimate</p>
+            <p className="text-[10px] text-slate-400">fares may vary</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BusPredictions({ itinerary, source, date, direction = "outbound", isBusSelected, onToggleBus, selectable }) {
+  const [state, setState] = useState({ status: "loading", quotes: [], error: "" });
+
+  const sourceCity = source || "Delhi";
+  const destCity = itinerary?.destination || "";
+  const origin = direction === "return" ? destCity : sourceCity;
+  const destination = direction === "return" ? sourceCity : destCity;
+  const startDate = date
+    ? String(date).substring(0, 10)
+    : itinerary?.startDate
+    ? String(itinerary.startDate).substring(0, 10)
+    : new Date().toISOString().substring(0, 10);
+
+  useEffect(() => {
+    if (!destination) return undefined;
+    let cancelled = false;
+    setState({ status: "loading", quotes: [], error: "" });
+
+    fetchBusFarePrediction({ origin, destination, startDate, windowDays: 1 })
+      .then((data) => {
+        if (cancelled) return;
+        const prediction = data?.prediction;
+        const quotes = (prediction?.quotes || []).map((quote) => ({
+          origin: prediction.origin,
+          destination: prediction.destination,
+          date: quote.date,
+          dayOfWeek: quote.dayOfWeek,
+          predictedFare: Number(quote.predictedFare),
+        }));
+        setState({ status: "ready", quotes, error: "" });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setState({
+          status: "error",
+          quotes: [],
+          error: error?.message || "Bus fares are unavailable for this route.",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [origin, destination, startDate]);
+
+  if (!destination) return null;
+
+  return (
+    <div className="mb-8 mt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 pb-2 border-b border-slate-100">
+        <div>
+          <div className="flex items-center gap-2">
+            <Bus className="w-5 h-5 text-[#2563EB]" />
+            <h2 className="text-xl font-bold text-slate-800">
+              Bus Fare: {origin} → {destination}
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            {selectable ? "Choose this to travel by bus for this leg" : `Predicted fare for ${startDate}`}
+          </p>
+        </div>
+      </div>
+
+      {state.status === "loading" && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 flex items-center gap-3 text-slate-600">
+          <Loader2 className="w-5 h-5 animate-spin text-[#2563EB]" />
+          <span className="text-sm font-medium">
+            Fetching bus fare predictions for {origin} → {destination}...
+          </span>
+        </div>
+      )}
+
+      {state.status === "error" && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+          {state.error}
+        </div>
+      )}
+
+      {state.status === "ready" && state.quotes.length === 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+          No bus fares were predicted for this route.
+        </div>
+      )}
+
+      {state.status === "ready" && state.quotes.length > 0 && (
+        <div className="grid gap-5 md:grid-cols-3">
+          {state.quotes.map((quote, index) => (
+            <BusCard
+              key={`${quote.date}-${quote.predictedFare}`}
+              quote={quote}
+              index={index}
+              selectable={selectable}
+              chosen={selectable && isBusSelected?.(quote, direction)}
+              onToggle={(q) => onToggleBus?.(q, direction)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Destination weather, fetched server-side during generation (best-effort —
+ * see weather.service.ts `getWeatherForCity`) and stored on the itinerary.
+ * Renders nothing when the lookup failed or OpenWeather wasn't configured.
+ */
+function WeatherCard({ weather, destination }) {
+  if (!weather?.current) return null;
+  const { current, forecast } = weather;
+
+  return (
+    <div className="mb-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 to-white p-4 flex flex-wrap items-center gap-4">
+      <img
+        src={`https://openweathermap.org/img/wn/${current.icon}@2x.png`}
+        alt={current.condition}
+        className="w-14 h-14 -my-2"
+      />
+      <div>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          Weather in {destination}
+        </p>
+        <p className="text-2xl font-extrabold text-slate-800">
+          {current.tempC}°C
+          <span className="text-sm font-medium text-slate-500 ml-1.5">{current.condition}</span>
+        </p>
+        <p className="text-xs text-slate-500">
+          High {current.highC}° · Low {current.lowC}° · Feels like {current.feelsLikeC}°
+        </p>
+      </div>
+      {forecast?.length > 0 && (
+        <div className="flex gap-3 ml-auto">
+          {forecast.slice(0, 4).map((day) => (
+            <div key={day.date} className="text-center">
+              <p className="text-[10px] font-semibold text-slate-500">{day.day}</p>
+              <img
+                src={`https://openweathermap.org/img/wn/${day.icon}.png`}
+                alt={day.condition}
+                className="w-8 h-8 mx-auto"
+              />
+              <p className="text-[10px] text-slate-500">
+                {day.highC}°/{day.lowC}°
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Nudge toward a transport mode by trip tier: luxury/premium always offers
+ * flight; budget nudges toward the cheaper ground modes. Standard trips get
+ * no strong nudge either way. */
+function recommendedTransportMode(itinerary) {
+  const tier = itinerary?.accommodationType;
+  if (tier === "luxury" || tier === "premium") return "flight";
+  if (tier === "budget") return "ground";
+  return null;
+}
+
+const TRANSPORT_MODE_LABELS = { flight: "✈ Flight chosen", train: "🚆 Train chosen", bus: "🚌 Bus chosen" };
+
+/**
+ * One leg (outbound or return) of the trip's transport choices: flight,
+ * train, and bus, with at most one chosen. Collapses to a one-line summary
+ * the first time a mode is chosen, and can be reopened.
+ */
+function TransportDirectionGroup({
+  title,
+  dateLabel,
+  itinerary,
+  source,
+  date,
+  direction,
+  selectable,
+  isFlightSelected,
+  isTrainSelected,
+  isBusSelected,
+  onToggleFlight,
+  onToggleTrain,
+  onToggleBus,
+  getChosenTransport,
+}) {
+  const chosen = getChosenTransport?.(direction);
+  const [open, setOpen] = useState(true);
+  const wasChosenRef = useRef(Boolean(chosen));
+
+  useEffect(() => {
+    if (chosen && !wasChosenRef.current) setOpen(false);
+    wasChosenRef.current = Boolean(chosen);
+  }, [chosen]);
+
+  const recommended = recommendedTransportMode(itinerary);
+
+  return (
+    <div className="mb-8 mt-6 rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-3 p-4 text-left"
+      >
+        <div>
+          <h2 className="text-lg font-bold text-slate-800">{title}</h2>
+          <p className="text-xs text-slate-500 mt-0.5">{dateLabel}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {chosen && (
+            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+              {TRANSPORT_MODE_LABELS[chosen.mode]}
+            </span>
+          )}
+          {open ? (
+            <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
+          )}
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 border-t border-slate-100">
+          {recommended && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-lg mt-4 w-fit">
+              <Sparkles className="w-3.5 h-3.5" />
+              {recommended === "flight"
+                ? "Recommended for your trip: Flight"
+                : "Budget tip: train or bus usually costs less than flying"}
+            </div>
+          )}
+          <FlightPredictions
+            itinerary={itinerary}
+            source={source}
+            date={date}
+            direction={direction}
+            selectable={selectable}
+            isFlightSelected={isFlightSelected}
+            onToggleFlight={onToggleFlight}
+          />
+          <RailPredictions
+            itinerary={itinerary}
+            source={source}
+            date={date}
+            direction={direction}
+            selectable={selectable}
+            isTrainSelected={isTrainSelected}
+            onToggleTrain={onToggleTrain}
+          />
+          <BusPredictions
+            itinerary={itinerary}
+            source={source}
+            date={date}
+            direction={direction}
+            selectable={selectable}
+            isBusSelected={isBusSelected}
+            onToggleBus={onToggleBus}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The itinerary's full transport picker: a Going leg and a Returning leg,
+ * each independent — flying out and busing back is a normal combination. */
+function TransportSection({
+  itinerary,
+  sourceCity,
+  selectable,
+  isFlightSelected,
+  isTrainSelected,
+  isBusSelected,
+  onToggleFlight,
+  onToggleTrain,
+  onToggleBus,
+  getChosenTransport,
+}) {
+  return (
+    <>
+      <TransportDirectionGroup
+        title="Going"
+        dateLabel={itinerary?.startDate ? `Departing ${itinerary.startDate}` : "Departure"}
+        itinerary={itinerary}
+        source={sourceCity}
+        date={itinerary?.startDate}
+        direction="outbound"
+        selectable={selectable}
+        isFlightSelected={isFlightSelected}
+        isTrainSelected={isTrainSelected}
+        isBusSelected={isBusSelected}
+        onToggleFlight={onToggleFlight}
+        onToggleTrain={onToggleTrain}
+        onToggleBus={onToggleBus}
+        getChosenTransport={getChosenTransport}
+      />
+      <TransportDirectionGroup
+        title="Returning"
+        dateLabel={itinerary?.endDate ? `Returning ${itinerary.endDate}` : "Return"}
+        itinerary={itinerary}
+        source={sourceCity}
+        date={itinerary?.endDate}
+        direction="return"
+        selectable={selectable}
+        isFlightSelected={isFlightSelected}
+        isTrainSelected={isTrainSelected}
+        isBusSelected={isBusSelected}
+        onToggleFlight={onToggleFlight}
+        onToggleTrain={onToggleTrain}
+        onToggleBus={onToggleBus}
+        getChosenTransport={getChosenTransport}
+      />
+    </>
   );
 }
 
@@ -692,14 +1131,42 @@ function trainKey(train) {
   return [train?.origin, train?.destination, train?.date].join("|");
 }
 
+// Same deal for buses: no operator/service identity, just route + date.
+function busKey(bus) {
+  return [bus?.origin, bus?.destination, bus?.date].join("|");
+}
+
+// A direction (outbound/return) holds at most one chosen transport mode. An
+// entry saved before the outbound/return split has no `direction` and is
+// treated as "outbound".
+function entryDirection(entry) {
+  return entry.direction || "outbound";
+}
+function pruneDirection(list, direction) {
+  return list.filter((entry) => entryDirection(entry) !== direction);
+}
+
 function useItinerarySelections(itinerary, readOnly) {
   const itineraryId = itinerary?.id;
 
-  const fromItinerary = () => ({
-    excluded: new Set(itinerary?.selections?.excluded || []),
-    flights: itinerary?.selections?.flights || [],
-    trains: itinerary?.selections?.trains || [],
-  });
+  // Hotels default to UNselected until the traveler picks one; places and
+  // activities default to selected, as before. A freshly generated itinerary
+  // has no saved `selections` yet (the field is absent, not an empty object),
+  // so that's the signal to seed `excluded` with every hotel key; a
+  // previously saved itinerary keeps whatever was already saved untouched.
+  const fromItinerary = () => {
+    const saved = itinerary?.selections;
+    const hotelCount = Array.isArray(itinerary?.accommodations) ? itinerary.accommodations.length : 0;
+    const excluded = saved
+      ? new Set(saved.excluded || [])
+      : new Set(Array.from({ length: hotelCount }, (_, i) => selectionKey("hotel", i)));
+    return {
+      excluded,
+      flights: saved?.flights || [],
+      trains: saved?.trains || [],
+      buses: saved?.buses || [],
+    };
+  };
 
   const [selections, setSelections] = useState(fromItinerary);
   const [saveState, setSaveState] = useState("idle");
@@ -734,6 +1201,7 @@ function useItinerarySelections(itinerary, readOnly) {
             excluded: [...next.excluded],
             flights: next.flights,
             trains: next.trains,
+            buses: next.buses,
           }),
         )
         .then(() => setSaveState("saved"))
@@ -767,28 +1235,51 @@ function useItinerarySelections(itinerary, readOnly) {
   );
 
   const toggleFlight = useCallback(
-    (flight) => {
+    (flight, direction = "outbound") => {
       const key = flightKey(flight);
-      const chosen = selections.flights.some((f) => flightKey(f) === key);
+      const alreadyChosen = selections.flights.some(
+        (f) => flightKey(f) === key && entryDirection(f) === direction,
+      );
+      const flights = pruneDirection(selections.flights, direction);
       commit({
         ...selections,
-        flights: chosen
-          ? selections.flights.filter((f) => flightKey(f) !== key)
-          : [...selections.flights, flight],
+        flights: alreadyChosen ? flights : [...flights, { ...flight, direction }],
+        trains: pruneDirection(selections.trains, direction),
+        buses: pruneDirection(selections.buses, direction),
       });
     },
     [commit, selections],
   );
 
   const toggleTrain = useCallback(
-    (train) => {
+    (train, direction = "outbound") => {
       const key = trainKey(train);
-      const chosen = selections.trains.some((t) => trainKey(t) === key);
+      const alreadyChosen = selections.trains.some(
+        (t) => trainKey(t) === key && entryDirection(t) === direction,
+      );
+      const trains = pruneDirection(selections.trains, direction);
       commit({
         ...selections,
-        trains: chosen
-          ? selections.trains.filter((t) => trainKey(t) !== key)
-          : [...selections.trains, train],
+        trains: alreadyChosen ? trains : [...trains, { ...train, direction }],
+        flights: pruneDirection(selections.flights, direction),
+        buses: pruneDirection(selections.buses, direction),
+      });
+    },
+    [commit, selections],
+  );
+
+  const toggleBus = useCallback(
+    (bus, direction = "outbound") => {
+      const key = busKey(bus);
+      const alreadyChosen = selections.buses.some(
+        (b) => busKey(b) === key && entryDirection(b) === direction,
+      );
+      const buses = pruneDirection(selections.buses, direction);
+      commit({
+        ...selections,
+        buses: alreadyChosen ? buses : [...buses, { ...bus, direction }],
+        flights: pruneDirection(selections.flights, direction),
+        trains: pruneDirection(selections.trains, direction),
       });
     },
     [commit, selections],
@@ -797,12 +1288,35 @@ function useItinerarySelections(itinerary, readOnly) {
   const isSelected = useCallback((key) => !selections.excluded.has(key), [selections]);
 
   const isFlightSelected = useCallback(
-    (flight) => selections.flights.some((f) => flightKey(f) === flightKey(flight)),
+    (flight, direction = "outbound") =>
+      selections.flights.some((f) => flightKey(f) === flightKey(flight) && entryDirection(f) === direction),
     [selections],
   );
 
   const isTrainSelected = useCallback(
-    (train) => selections.trains.some((t) => trainKey(t) === trainKey(train)),
+    (train, direction = "outbound") =>
+      selections.trains.some((t) => trainKey(t) === trainKey(train) && entryDirection(t) === direction),
+    [selections],
+  );
+
+  const isBusSelected = useCallback(
+    (bus, direction = "outbound") =>
+      selections.buses.some((b) => busKey(b) === busKey(bus) && entryDirection(b) === direction),
+    [selections],
+  );
+
+  // What's chosen for a direction, whichever mode it is — drives the
+  // collapse-after-choosing summary line.
+  const getChosenTransport = useCallback(
+    (direction) => {
+      const flight = selections.flights.find((f) => entryDirection(f) === direction);
+      if (flight) return { mode: "flight", item: flight };
+      const train = selections.trains.find((t) => entryDirection(t) === direction);
+      if (train) return { mode: "train", item: train };
+      const bus = selections.buses.find((b) => entryDirection(b) === direction);
+      if (bus) return { mode: "bus", item: bus };
+      return null;
+    },
     [selections],
   );
 
@@ -810,12 +1324,26 @@ function useItinerarySelections(itinerary, readOnly) {
     isSelected,
     isFlightSelected,
     isTrainSelected,
+    isBusSelected,
+    getChosenTransport,
     toggle,
     toggleFlight,
     toggleTrain,
+    toggleBus,
     saveState,
     selections,
   };
+}
+
+/**
+ * Defers mounting a heavy child (a live chart, a tile map) until it has
+ * scrolled near view, so it isn't live and repainting on every scroll frame
+ * before the traveler ever sees it. `minHeight` holds the placeholder's
+ * height to avoid a layout jump when the real content mounts in.
+ */
+function LazyMount({ children, minHeight = 0 }) {
+  const [ref, inView] = useInView();
+  return <div ref={ref}>{inView ? children : <div style={{ minHeight }} />}</div>;
 }
 
 /**
@@ -907,9 +1435,12 @@ export default function ItineraryResults({
     isSelected,
     isFlightSelected,
     isTrainSelected,
+    isBusSelected,
+    getChosenTransport,
     toggle,
     toggleFlight,
     toggleTrain,
+    toggleBus,
     saveState,
     selections,
   } = useItinerarySelections(itinerary, readOnly);
@@ -1025,6 +1556,8 @@ export default function ItineraryResults({
           </span>
         </div>
 
+        <WeatherCard weather={itinerary.weather} destination={itinerary.destination} />
+
         <div className="prose prose-slate max-w-none">
           <h2 className="text-xl font-bold mb-3">Overview</h2>
           <p className="text-slate-600">{itinerary.overview}</p>
@@ -1035,23 +1568,22 @@ export default function ItineraryResults({
             places={placesToVisit}
           />
 
-          <FlightPredictions
+          <TransportSection
             itinerary={itinerary}
-            source={sourceCity}
+            sourceCity={sourceCity}
             selectable={selectable}
             isFlightSelected={isFlightSelected}
-            onToggleFlight={toggleFlight}
-          />
-
-          <RailPredictions
-            itinerary={itinerary}
-            source={sourceCity}
-            selectable={selectable}
             isTrainSelected={isTrainSelected}
+            isBusSelected={isBusSelected}
+            onToggleFlight={toggleFlight}
             onToggleTrain={toggleTrain}
+            onToggleBus={toggleBus}
+            getChosenTransport={getChosenTransport}
           />
 
-          <PriceHistoryGraph itinerary={itinerary} sourceCity={sourceCity} />
+          <LazyMount minHeight={300}>
+            <PriceHistoryGraph itinerary={itinerary} sourceCity={sourceCity} />
+          </LazyMount>
 
         
           {/* ── Digital Receipt ── */}
@@ -1178,7 +1710,7 @@ export default function ItineraryResults({
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {accommodations.map((acc, i) => {
                 const key = selectionKey("hotel", i);
                 const checked = !selectable || isSelected(key);
@@ -1187,12 +1719,21 @@ export default function ItineraryResults({
                 return (
                   <div
                     key={`${acc.name}-${i}`}
-                    className={`rounded-2xl overflow-hidden bg-white transition-all ${
+                    className={`relative rounded-xl overflow-hidden bg-white transition-[opacity,box-shadow] ${
                       checked ? "border border-slate-200 shadow-sm" : "border border-slate-200 opacity-50"
                     }`}
                   >
+                    {selectable && (
+                      <SelectBox
+                        checked={checked}
+                        onChange={() => toggle(key)}
+                        label={`Include ${acc.name} in my PDF`}
+                        className="absolute top-1.5 right-1.5 z-10 bg-white/90 rounded"
+                      />
+                    )}
+
                     {safeThumbnail && (
-                      <div className="relative h-36 overflow-hidden bg-slate-100">
+                      <div className="relative aspect-square overflow-hidden bg-slate-100">
                         <img
                           src={safeThumbnail}
                           alt={acc.name}
@@ -1205,85 +1746,45 @@ export default function ItineraryResults({
                           }}
                         />
                         {acc.hotelClass ? (
-                          <span className="absolute bottom-2 left-2 rounded bg-black/55 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+                          <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">
                             {acc.hotelClass}-STAR
                           </span>
                         ) : null}
                       </div>
                     )}
 
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 truncate">{acc.name}</p>
-                          <p className="text-xs text-slate-500 mt-0.5 capitalize">
-                            {acc.type} · {acc.location}
-                          </p>
-                        </div>
-                        {selectable && (
-                          <SelectBox
-                            checked={checked}
-                            onChange={() => toggle(key)}
-                            label={`Include ${acc.name} in my PDF`}
-                            className="mt-1"
-                          />
-                        )}
-                      </div>
+                    <div className="p-3">
+                      <p className="font-semibold text-slate-900 text-sm truncate">{acc.name}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 capitalize truncate">
+                        {acc.type} · {acc.location}
+                      </p>
 
                       {acc.rating ? (
-                        <div className="mt-2 flex items-center gap-1.5 text-xs">
-                          <Star size={13} className="fill-amber-400 text-amber-400" />
+                        <div className="mt-1.5 flex items-center gap-1 text-[11px]">
+                          <Star size={11} className="fill-amber-400 text-amber-400" />
                           <span className="font-bold text-slate-800">{acc.rating}</span>
                           {acc.reviewsCount ? (
                             <span className="text-slate-500">
-                              ({acc.reviewsCount.toLocaleString("en-IN")} reviews)
+                              ({acc.reviewsCount.toLocaleString("en-IN")})
                             </span>
-                          ) : null}
-                          {acc.locationRating ? (
-                            <span className="text-slate-400">· Location {acc.locationRating}/5</span>
                           ) : null}
                         </div>
                       ) : null}
 
-                      {acc.reviewHighlights?.length ? (
-                        <p className="mt-2 text-[11px] text-slate-500 italic">
-                          Guests liked: {acc.reviewHighlights.slice(0, 3).join(", ")}
+                      <div className="mt-2 flex items-end justify-between border-t border-dashed border-slate-200 pt-2">
+                        <p className="text-sm font-extrabold text-[#2563EB] truncate">
+                          ₹{Number(acc.pricePerNight || 0).toLocaleString("en-IN")}
+                          <span className="text-[10px] font-medium text-slate-400"> /night</span>
                         </p>
-                      ) : null}
-
-                      {acc.amenities?.length ? (
-                        <div className="mt-2.5 flex flex-wrap gap-1.5">
-                          {acc.amenities.slice(0, 4).map((amenity) => (
-                            <span
-                              key={amenity}
-                              className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"
-                            >
-                              {amenity}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      <div className="mt-3 flex items-end justify-between border-t border-dashed border-slate-200 pt-3">
-                        <div>
-                          <p className="text-lg font-extrabold text-[#2563EB]">
-                            ₹{Number(acc.pricePerNight || 0).toLocaleString("en-IN")}
-                            <span className="text-[11px] font-medium text-slate-400"> /night</span>
-                          </p>
-                          {acc.totalPrice ? (
-                            <p className="text-[10px] text-slate-400">
-                              ₹{Number(acc.totalPrice).toLocaleString("en-IN")} total stay
-                            </p>
-                          ) : null}
-                        </div>
                         {safeBookingLink && (
                           <a
                             href={safeBookingLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#2563EB] hover:underline"
+                            className="inline-flex items-center text-[#2563EB] shrink-0"
+                            aria-label={`View deal for ${acc.name}`}
                           >
-                            View deal <ExternalLink size={12} />
+                            <ExternalLink size={13} />
                           </a>
                         )}
                       </div>

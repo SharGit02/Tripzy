@@ -18,8 +18,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException
 
-from app import predictor, rail_predictor
+from app import bus_predictor, predictor, rail_predictor
 from app.schemas import (
+    BusPredictWindowRequest,
+    BusPredictWindowResponse,
     HealthResponse,
     PredictWindowRequest,
     PredictWindowResponse,
@@ -37,6 +39,9 @@ DATA_PATH = os.environ.get(
 RAIL_MODEL_PATH = os.environ.get(
     "ML_RAIL_MODEL_PATH", str(BASE_DIR / "models" / "lightgbm_rail_model_3_inputs.pkl")
 )
+BUS_MODEL_PATH = os.environ.get(
+    "ML_BUS_MODEL_PATH", str(BASE_DIR / "models" / "lightgbm_bus_model.pkl")
+)
 
 
 @asynccontextmanager
@@ -49,6 +54,12 @@ async def lifespan(app: FastAPI):
         rail_predictor.load_artifacts(RAIL_MODEL_PATH)
     except Exception as error:  # noqa: BLE001 - logged, then degraded
         print(f"[rail] Model unavailable: {error}", flush=True)
+    # Same best-effort contract as rail: a missing/corrupt bus .pkl degrades
+    # to a 503 on the bus endpoint only, never takes flight/rail down with it.
+    try:
+        bus_predictor.load_artifacts(BUS_MODEL_PATH)
+    except Exception as error:  # noqa: BLE001 - logged, then degraded
+        print(f"[bus] Model unavailable: {error}", flush=True)
     yield
 
 
@@ -70,6 +81,8 @@ def health() -> HealthResponse:
         known_routes=predictor.known_route_count(),
         rail_model_loaded=rail_predictor.is_loaded(),
         rail_stations=rail_predictor.station_count(),
+        bus_model_loaded=bus_predictor.is_loaded(),
+        bus_routes=bus_predictor.route_count(),
     )
 
 
@@ -112,6 +125,32 @@ def predict_rail_window(body: RailPredictWindowRequest) -> RailPredictWindowResp
     result = rail_predictor.predict_window(origin, destination, body.start_date, body.window_days)
 
     return RailPredictWindowResponse(
+        origin=origin,
+        destination=destination,
+        start_date=body.start_date,
+        window_days=body.window_days,
+        generated_at=datetime.now(timezone.utc),
+        **result,
+    )
+
+
+@app.post(
+    "/predict/bus/window",
+    response_model=BusPredictWindowResponse,
+    dependencies=[Depends(verify_internal_key)],
+)
+def predict_bus_window(body: BusPredictWindowRequest) -> BusPredictWindowResponse:
+    if not bus_predictor.is_loaded():
+        raise HTTPException(status_code=503, detail="Bus model is not loaded.")
+
+    try:
+        origin, destination = bus_predictor.canonicalize_route(body.origin, body.destination)
+    except bus_predictor.SameCityError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
+    result = bus_predictor.predict_window(origin, destination, body.start_date, body.window_days)
+
+    return BusPredictWindowResponse(
         origin=origin,
         destination=destination,
         start_date=body.start_date,

@@ -1,16 +1,26 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ClockLoader } from "react-spinners";
-import { AlertCircle, RefreshCw, ArrowLeft } from "lucide-react";
+import { AlertCircle, RefreshCw, ArrowLeft, Check } from "lucide-react";
 import UserNavbar from "../../components/layout/UserNavbar";
 import Footer from "../../components/layout/Footer";
-import { generateItinerary } from "../../lib/authApi";
+import { generateItineraryStream } from "../../lib/authApi";
+
+// Ordered stages the backend reports (itinerary.service.ts `onProgress`),
+// each with the label shown on the bar and the percent it fills up to.
+const STAGES = [
+  { stage: "hotels", label: "Finding great stays", pct: 20 },
+  { stage: "weather", label: "Checking the weather", pct: 40 },
+  { stage: "ai", label: "Crafting your plan", pct: 85 },
+  { stage: "finalizing", label: "Finalizing details", pct: 95 },
+  { stage: "done", label: "Ready!", pct: 100 },
+];
 
 export default function GeneratingItineraryPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState(STAGES[0]);
   const payload = location.state?.payload;
   const hasCalled = useRef(false);
 
@@ -22,9 +32,13 @@ export default function GeneratingItineraryPage() {
 
     setLoading(true);
     setError("");
+    setProgress(STAGES[0]);
 
     try {
-      const data = await generateItinerary(payload);
+      const data = await generateItineraryStream(payload, (event) => {
+        const matched = STAGES.find((s) => s.stage === event.stage);
+        if (matched) setProgress(matched);
+      });
       const itineraryId = data.itineraryId || data.itinerary?.id;
       if (!itineraryId) {
         throw new Error("The itinerary was created, but we didn't get an ID back.");
@@ -101,12 +115,34 @@ export default function GeneratingItineraryPage() {
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-12 text-center max-w-md mx-auto">
-              <div className="flex justify-center mb-6">
-                <ClockLoader color="#36d7b7" size={60} />
+            <div className="rounded-3xl bg-white shadow-[0_18px_50px_rgba(15,36,66,0.08)] border border-slate-100 p-12 text-center max-w-md w-full mx-auto">
+              <h2 className="text-2xl font-bold mb-1">Creating your itinerary...</h2>
+              <p className="text-slate-500 mb-8">{progress.label}</p>
+
+              <div className="w-full h-3 rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#36d7b7] to-[#2563EB] transition-[width] duration-700 ease-out"
+                  style={{ width: `${progress.pct}%` }}
+                />
               </div>
-              <h2 className="text-2xl font-bold mb-2">Creating your itinerary...</h2>
-              <p className="text-slate-500">This may take a minute while we plan every detail.</p>
+
+              <ol className="mt-6 flex flex-col gap-2 text-left">
+                {STAGES.filter((s) => s.stage !== "done").map((s) => {
+                  const reached = progress.pct >= s.pct;
+                  return (
+                    <li key={s.stage} className="flex items-center gap-2 text-sm">
+                      <span
+                        className={`flex items-center justify-center w-5 h-5 rounded-full shrink-0 ${
+                          reached ? "bg-[#2563EB] text-white" : "bg-slate-100 text-slate-400"
+                        }`}
+                      >
+                        {reached ? <Check className="w-3 h-3" /> : null}
+                      </span>
+                      <span className={reached ? "text-slate-800" : "text-slate-400"}>{s.label}</span>
+                    </li>
+                  );
+                })}
+              </ol>
             </div>
           )}
         </main>

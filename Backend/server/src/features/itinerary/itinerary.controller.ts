@@ -18,47 +18,89 @@ function itineraryIdParam(req: Request): string {
     return String(id || "");
 }
 
+/** Shared mapping from a thrown generation error to an HTTP status + body, used by both the plain-JSON and SSE response paths below. */
+function describeGenerateError(error: unknown): { statusCode: number; body: Record<string, unknown> } {
+    if (error instanceof z.ZodError) {
+        return {
+            statusCode: 422,
+            body: {
+                message: "We couldn't finish that itinerary. Try a shorter trip or different dates.",
+                errors: error.flatten().fieldErrors,
+            },
+        };
+    }
+    if (error instanceof GeminiContentError) {
+        return { statusCode: error.statusCode ?? 422, body: { message: error.message } };
+    }
+    if (error instanceof Error && (error.message.includes("API key") || error.message.includes("not configured"))) {
+        return {
+            statusCode: 503,
+            body: { message: "The trip planner isn't configured right now. Please try again later." },
+        };
+    }
+    return { statusCode: 500, body: { message: "We couldn't create your itinerary. Please try again." } };
+}
+
 export async function generateDirectItinerary(req: Request, res: Response): Promise<void> {
-    try {
-        const parsed = DirectItineraryInputSchema.safeParse(req.body);
-        if (!parsed.success) {
-            res.status(400).json(formatZodError(parsed.error));
-            return;
+    const parsed = DirectItineraryInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json(formatZodError(parsed.error));
+        return;
+    }
+
+    // The generating page wants real progress, not just a blocking spinner.
+    // Opt-in via Accept so every other caller (regenerate, tests, curl) keeps
+    // getting the plain JSON response unchanged.
+    const wantsStream = (req.headers.accept || "").includes("text/event-stream");
+
+    if (!wantsStream) {
+        try {
+            const { itineraryId } =
+                await itineraryService.generateDirectItinerary(parsed.data, req.user!.userId);
+            const saved = await itineraryService.getItinerary(itineraryId, req.user!.userId);
+
+            res.setHeader("X-Itinerary-ID", itineraryId);
+            res.json({
+                itinerary: presentItinerary(saved),
+                itineraryId,
+                message: "Itinerary generated successfully",
+                pdfAvailable: true,
+            });
+        } catch (error) {
+            console.error("Generate direct itinerary error:", error);
+            const { statusCode, body } = describeGenerateError(error);
+            res.status(statusCode).json(body);
         }
+        return;
+    }
 
-        const { itineraryId } =
-            await itineraryService.generateDirectItinerary(parsed.data, req.user!.userId);
+    res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+    });
+    const send = (event: Record<string, unknown>) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+    try {
+        const { itineraryId } = await itineraryService.generateDirectItinerary(
+            parsed.data,
+            req.user!.userId,
+            (stage) => send({ stage }),
+        );
         const saved = await itineraryService.getItinerary(itineraryId, req.user!.userId);
-
-        res.setHeader("X-Itinerary-ID", itineraryId);
-        res.json({
-            itinerary: presentItinerary(saved),
+        send({
+            stage: "done",
             itineraryId,
+            itinerary: presentItinerary(saved),
             message: "Itinerary generated successfully",
             pdfAvailable: true,
         });
     } catch (error) {
         console.error("Generate direct itinerary error:", error);
-        if (error instanceof z.ZodError) {
-            res.status(422).json({
-                message: "We couldn't finish that itinerary. Try a shorter trip or different dates.",
-                errors: error.flatten().fieldErrors,
-            });
-            return;
-        }
-        if (error instanceof GeminiContentError) {
-            res.status(error.statusCode ?? 422).json({ message: error.message });
-            return;
-        }
-        if (error instanceof Error) {
-            if (error.message.includes("API key") || error.message.includes("not configured")) {
-                res.status(503).json({
-                    message: "The trip planner isn't configured right now. Please try again later.",
-                });
-                return;
-            }
-        }
-        res.status(500).json({ message: "We couldn't create your itinerary. Please try again." });
+        send({ stage: "error", ...describeGenerateError(error).body });
+    } finally {
+        res.end();
     }
 }
 

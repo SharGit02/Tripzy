@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plane, MapPin, ExternalLink, Navigation } from "lucide-react";
 import { CITY_COORDS } from "../../context/LocationContext";
+import { useInView } from "../../hooks/useInView";
 
 const EXTRA_CITY_COORDS = {
   Guwahati: [26.1445, 91.7362],
@@ -43,6 +44,7 @@ export default function ItineraryMap({ source, destination, origin, places = [] 
   const [sourceCoords, setSourceCoords] = useState(() => coordsForName(sourceName) || [28.6139, 77.209]);
   const [destCoords, setDestCoords] = useState(() => coordsForName(destName) || [15.4909, 73.8278]);
   const [activeFocus, setActiveFocus] = useState("both"); // "both" | "source" | "dest"
+  const [mapRef, mapInView] = useInView();
 
   useEffect(() => {
     const sKnown = coordsForName(sourceName);
@@ -310,16 +312,24 @@ export default function ItineraryMap({ source, destination, origin, places = [] 
         </div>
       </div>
 
-      {/* Leaflet Iframe Map */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-slate-100">
-        <iframe
-          key={`${sourceName}-${destName}-${activeFocus}-${sLat}-${dLat}`}
-          title={`Route from ${sourceName} to ${destName}`}
-          srcDoc={leafletSrcDoc}
-          className="w-full border-0"
-          style={{ height: "380px" }}
-          loading="lazy"
-        />
+      {/* Leaflet Iframe Map — only mounted once scrolled near view, since a
+          live tile map stays an active compositor layer for as long as it's
+          mounted and is the single biggest cause of scroll jank on this page. */}
+      <div ref={mapRef} className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-slate-100">
+        {mapInView ? (
+          <iframe
+            key={`${sourceName}-${destName}-${activeFocus}-${sLat}-${dLat}`}
+            title={`Route from ${sourceName} to ${destName}`}
+            srcDoc={leafletSrcDoc}
+            className="w-full border-0"
+            style={{ height: "380px" }}
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full flex items-center justify-center text-sm text-slate-400" style={{ height: "380px" }}>
+            Loading map…
+          </div>
+        )}
       </div>
 
       {/* Places to visit pills */}

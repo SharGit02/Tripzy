@@ -7,11 +7,12 @@ import {
     classifyGeminiFailure,
     extractText,
     GeminiContentError,
+    GEMINI_OVERLOAD_REASON,
     type GeminiGenerateResponse,
     type GeminiRequestBody,
 } from "./gemini.provider.js";
 import { callNvidia, getNvidiaModels, isNvidiaConfigured } from "./nvidia.provider.js";
-import { KeyWaterfall, NoKeysConfiguredError } from "./keyWaterfall.js";
+import { AllKeysExhaustedError, KeyWaterfall, NoKeysConfiguredError } from "./keyWaterfall.js";
 
 export interface GenerateOptions {
     prompt: string;
@@ -212,6 +213,20 @@ async function generateWithGemini(options: GenerateOptions, extraConfig?: Record
                     return result;
                 } catch (error) {
                     lastError = error as Error;
+
+                    // Every key in the waterfall reported "overloaded" — no retry or
+                    // model swap fixes that, and each one only delays the user
+                    // further. Skip straight out to generateWithFallback's NVIDIA leg.
+                    if (
+                        error instanceof AllKeysExhaustedError &&
+                        error.attempts.some((a) => a.reason === GEMINI_OVERLOAD_REASON)
+                    ) {
+                        console.warn(
+                            `[AI] Gemini overloaded | reqId=${requestId} | model=${model} — skipping remaining retries/models, falling back to NVIDIA`,
+                        );
+                        throw lastError;
+                    }
+
                     const failure = classifyGeminiFailure(error);
                     console.warn(
                         `[AI] FAIL | reqId=${requestId} | model=${model} | attempt=${attempt + 1} | kind=${failure.kind} | reason=${failure.reason}`,

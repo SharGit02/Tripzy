@@ -87,6 +87,19 @@ function selectedTrains(itinerary: ItineraryOutput): SelectedTrain[] {
     return Array.isArray(trains) ? trains : [];
 }
 
+type SelectedBus = {
+    origin?: string;
+    destination?: string;
+    date?: string;
+    dayOfWeek?: string;
+    predictedFare?: number;
+};
+
+function selectedBuses(itinerary: ItineraryOutput): SelectedBus[] {
+    const buses = (itinerary as any)?.selections?.buses;
+    return Array.isArray(buses) ? buses : [];
+}
+
 type FareCard = {
     /** Airline for a flight, origin station for a train. */
     label: string;
@@ -735,6 +748,7 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
             const isSelected = buildSelectionFilter(itinerary);
             const flights = selectedFlights(itinerary);
             const trains = selectedTrains(itinerary);
+            const buses = selectedBuses(itinerary);
 
             const accommodations = (Array.isArray(itinerary.accommodations) ? itinerary.accommodations : [])
                 .filter((_acc, index) => isSelected(`hotel:${index}`));
@@ -928,6 +942,23 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
                     meta: [
                         train.date ? formatDate(String(train.date)) : "",
                         train.dayOfWeek || "",
+                    ],
+                })),
+            );
+
+            // Buses carry no operator or service identity either - same
+            // route+date+fare shape as trains (see bus_predictor.py).
+            addFareSection(
+                doc,
+                "Your Buses",
+                "Selected from predicted bus fares",
+                buses.map((bus) => ({
+                    label: String(bus.origin || "Bus"),
+                    fare: bus.predictedFare,
+                    route: `${bus.origin || ""}  ->  ${bus.destination || ""}`,
+                    meta: [
+                        bus.date ? formatDate(String(bus.date)) : "",
+                        bus.dayOfWeek || "",
                     ],
                 })),
             );

@@ -14,7 +14,7 @@ import {
   Search,
   Navigation,
   Loader2,
-  Check
+  Check,
 } from "lucide-react";
 import logoImg from "../../assets/images/logo.png";
 import { fetchCurrentUser, logoutUser } from "../../lib/authApi";
@@ -41,7 +41,9 @@ export default function UserNavbar() {
 
   const isNavActive = (path) => {
     if (path === "/plan") {
-      return location.pathname === "/plan" || location.pathname.startsWith("/plan/");
+      return (
+        location.pathname === "/plan" || location.pathname.startsWith("/plan/")
+      );
     }
     return location.pathname === path;
   };
@@ -52,7 +54,7 @@ export default function UserNavbar() {
       .then((res) => {
         if (isMounted) setUser(res.user || null);
       })
-      .catch(() => { });
+      .catch(() => {});
     return () => {
       isMounted = false;
     };
@@ -82,11 +84,11 @@ export default function UserNavbar() {
 
   const initials = user?.name
     ? user.name
-      .split(" ")
-      .map((p) => p[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase()
+        .split(" ")
+        .map((p) => p[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
     : "";
 
   return (
@@ -118,10 +120,11 @@ export default function UserNavbar() {
                 className="relative py-1 flex items-center gap-2 text-sm font-semibold transition-colors duration-200"
               >
                 <div
-                  className={`flex items-center gap-2 transition-colors ${isActive
-                    ? "text-[#2563EB]"
-                    : "text-slate-700 hover:text-[#2563EB]"
-                    }`}
+                  className={`flex items-center gap-2 transition-colors ${
+                    isActive
+                      ? "text-[#2563EB]"
+                      : "text-slate-700 hover:text-[#2563EB]"
+                  }`}
                 >
                   <Icon size={18} strokeWidth={isActive ? 2.3 : 1.8} />
                   <span>{item.name}</span>
@@ -141,7 +144,6 @@ export default function UserNavbar() {
 
         {/* ── Right-side items: Location Selector, Premium, Bell, Account ── */}
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-
           {/* ── Location Selector Toggle & Filter-style Dialog ── */}
           <div ref={locationRef} className="relative">
             <button
@@ -158,19 +160,18 @@ export default function UserNavbar() {
               </span>
               <ChevronDown
                 size={12}
-                className={`text-slate-400 transition-transform duration-200 ${locationOpen ? "rotate-180 text-[#2563EB]" : ""
-                  }`}
+                className={`text-slate-400 transition-transform duration-200 ${
+                  locationOpen ? "rotate-180 text-[#2563EB]" : ""
+                }`}
               />
             </button>
 
             {/* Location dropdown */}
-            <LocationDropdown isOpen={locationOpen} setIsOpen={setLocationOpen} align="right" />
-          </div>
-
-          {/* Premium affordance (decorative) */}
-          <div className="hidden sm:flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-xs font-bold px-3 py-1.5 rounded-full">
-            <Crown size={13} strokeWidth={2.3} />
-            <span>Premium</span>
+            <LocationDropdown
+              isOpen={locationOpen}
+              setIsOpen={setLocationOpen}
+              align="right"
+            />
           </div>
 
           {/* Notifications (decorative) */}
@@ -234,10 +235,11 @@ export default function UserNavbar() {
                         key={item.name}
                         to={item.path}
                         onClick={() => setMenuOpen(false)}
-                        className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${isNavActive(item.path)
-                          ? "text-[#2563EB]"
-                          : "text-slate-700 hover:bg-slate-50 hover:text-[#2563EB]"
-                          }`}
+                        className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+                          isNavActive(item.path)
+                            ? "text-[#2563EB]"
+                            : "text-slate-700 hover:bg-slate-50 hover:text-[#2563EB]"
+                        }`}
                       >
                         <item.icon size={15} />
                         {item.name}

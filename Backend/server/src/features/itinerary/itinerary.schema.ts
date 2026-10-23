@@ -97,6 +97,11 @@ export const ItinerarySelectionsSchema = z.object({
                 predictedFare: z.number().nonnegative().optional(),
                 origin: z.string().optional(),
                 destination: z.string().optional(),
+                // Which leg this choice belongs to. Optional for backward
+                // compatibility with selections saved before outbound/return
+                // split; an untagged entry is treated as outbound everywhere it
+                // is read.
+                direction: z.enum(["outbound", "return"]).optional(),
             }),
         )
         .default([]),
@@ -111,6 +116,21 @@ export const ItinerarySelectionsSchema = z.object({
                 date: z.string().optional(),
                 dayOfWeek: z.string().optional(),
                 predictedFare: z.number().nonnegative().optional(),
+                direction: z.enum(["outbound", "return"]).optional(),
+            }),
+        )
+        .default([]),
+    // Same deal for buses: the RandomForest fare model predicts a route+date
+    // fare with no operator/service identity either (see bus_predictor.py).
+    buses: z
+        .array(
+            z.object({
+                origin: z.string().optional(),
+                destination: z.string().optional(),
+                date: z.string().optional(),
+                dayOfWeek: z.string().optional(),
+                predictedFare: z.number().nonnegative().optional(),
+                direction: z.enum(["outbound", "return"]).optional(),
             }),
         )
         .default([]),
@@ -255,6 +275,44 @@ export const ItineraryOutputSchema = z.object({
     }).optional(),
     selections: ItinerarySelectionsSchema.optional(),
     budgetVerdict: BudgetVerdictSchema.optional(),
+    // Fetched best-effort during generation (features/weather/weather.service.ts
+    // `getWeatherForCity`). Mirrors its WeatherPayload shape; absent when the
+    // lookup failed or OPEN_WEATHER_API is unconfigured — never blocks generation.
+    weather: z.object({
+        location: z.object({
+            city: z.string(),
+            country: z.string().nullable().optional(),
+            label: z.string(),
+            lat: z.number(),
+            lon: z.number(),
+            timezoneOffsetSeconds: z.number(),
+        }),
+        current: z.object({
+            observedAt: z.string(),
+            localDate: z.string(),
+            tempC: z.number(),
+            feelsLikeC: z.number(),
+            highC: z.number(),
+            lowC: z.number(),
+            condition: z.string(),
+            icon: z.string(),
+            humidity: z.number(),
+            windKph: z.number(),
+            precipitationChance: z.number(),
+            cloudCover: z.number(),
+            pressureHpa: z.number(),
+            visibilityKm: z.number().nullable(),
+        }),
+        forecast: z.array(z.object({
+            date: z.string(),
+            day: z.string(),
+            highC: z.number(),
+            lowC: z.number(),
+            icon: z.string(),
+            condition: z.string(),
+            precipitationChance: z.number(),
+        })),
+    }).optional(),
     generatedAt: z.string().datetime().optional(),
     version: z.string().default("1.0"),
 });

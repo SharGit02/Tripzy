@@ -13,6 +13,7 @@ import { itineraryRepository } from "./itinerary.repository.js";
 import { generateItineraryPdf } from "../../services/pdf/pdf.service.js";
 
 import { getHotelsOrEmpty, type Hotel } from "../hotels/hotels.service.js";
+import { getWeatherForCity } from "../weather/weather.service.js";
 
 import type {
     DirectItineraryInput,
@@ -1906,7 +1907,11 @@ function transformItineraryOutput(
 export const itineraryService = {
     async generateDirectItinerary(
         input: DirectItineraryInput,
-        userId: string
+        userId: string,
+        // Best-effort progress callback for the SSE stream in
+        // itinerary.controller.ts. Never thrown from, never awaited — a slow or
+        // broken listener must not slow down generation.
+        onProgress?: (stage: "hotels" | "weather" | "ai" | "finalizing") => void
     ): Promise<{
         itinerary: any;
         itineraryId: string;
@@ -1914,6 +1919,8 @@ export const itineraryService = {
         console.log(
             "[ITINERARY] ===== GENERATION START ====="
         );
+
+        onProgress?.("hotels");
 
         const requestedDays =
             calculateDays(
@@ -1979,8 +1986,21 @@ export const itineraryService = {
         );
 
         /*
+         * Destination weather. Best-effort, same reasoning as hotels: a down or
+         * unconfigured OpenWeather (OPEN_WEATHER_API unset) degrades to no
+         * weather card rather than failing the whole itinerary.
+         */
+        onProgress?.("weather");
+
+        const weather = await getWeatherForCity(input.destination).catch((error) => {
+            console.warn("[ITINERARY] Weather lookup failed:", (error as Error).message);
+            return undefined;
+        });
+
+        /*
          * AI generation
          */
+        onProgress?.("ai");
 
         const aiOutput =
             await itineraryAI.generateDirectItinerary(
@@ -2180,9 +2200,12 @@ export const itineraryService = {
                 input
             );
 
+        itinerary.weather = weather;
+
         /*
          * Integrity validation.
          */
+        onProgress?.("finalizing");
 
         const integrity =
             validateItineraryIntegrity(
