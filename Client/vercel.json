@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://tripzy-qiv6.onrender.com/api/$1"
+      "destination": "https://tripzy-fork.onrender.com/api/$1"
     },
     {
       "source": "/(.*)",
