@@ -11,14 +11,14 @@ const INTERESTS = new Set([
   "history",
 ]);
 
-const ACCOMMODATION = {
+export const ACCOMMODATION = {
   Budget: "budget",
   Standard: "standard",
   Premium: "premium",
   Luxury: "luxury",
 };
 
-const TRANSPORT = {
+export const TRANSPORT = {
   Flight: "flight",
   Train: "train",
   Bus: "bus",

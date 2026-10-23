@@ -3,6 +3,7 @@ import { userRepository } from "../users/user.repository.js";
 import type {
     DirectItineraryInput,
 } from "./itinerary.schema.js";
+import type { Hotel } from "../hotels/hotels.service.js";
 
 const ITINERARY_SYSTEM_PROMPT = `
 You are Tripzy's AI travel planner.
@@ -29,6 +30,10 @@ IMPORTANT:
 - "Free" is acceptable where appropriate.
 - Prefer well-known/common destinations and attractions.
 - Personalize around interests, travel style, group type and accommodation preference.
+- When the request lists REAL AVAILABLE HOTELS, you MUST pick one of them by its
+  exact name for "accommodation.name" and must not invent a different hotel.
+- Reference that same hotel by name in the check-in, checkout and any
+  hotel-related activities, so the plan reads as one consistent stay.
 
 RETURN EXACTLY THIS JSON STRUCTURE:
 
@@ -94,14 +99,32 @@ RULES FOR ITINERARY:
 - For couples, include a reasonable balance of sightseeing, food and relaxed experiences.
 - For families, consider child-friendly pacing.
 - For wheelchair accessibility, avoid inaccessible venues/routes and mention accessibility where relevant.
-- If the budget is provided, respect it.
 - If budget is not provided, produce sensible mid-range estimates.
+
+BUDGET RULES:
+- The stated budget is a CEILING TO COME IN AT OR UNDER, not a total to spend.
+  Coming in well under it is a good outcome, never a mistake to correct.
+- Do not scale costs up to reach the budget, and do not pad activities,
+  upgrade the stay or invent extras so the numbers add up to it.
+- The budget covers the WHOLE trip including travel to the destination and
+  back, not just spending once you are there.
+- If the trip genuinely cannot be done for the stated budget, plan the
+  cheapest sensible version anyway and say so plainly in the overview. Never
+  understate a cost to make the trip appear affordable.
+- When a hotel shortlist is supplied, you must pick from it. If even the
+  cheapest one is too expensive for the budget, pick that cheapest one and
+  note the overage in the overview. Never invent a cheaper hotel that is not
+  on the list.
 
 COST RULES:
 - Use numeric-looking cost strings where possible, e.g. "INR 1500".
 - Use "Free" for genuinely free activities.
 - Do not use negative costs.
 - Do not use ranges unless useful, e.g. "INR 1500-2000".
+- Quote intercity travel (flight, train, bus) as the fare FOR ONE PERSON.
+  Local transport at the destination is quoted for the whole group.
+- Every intercity option in transportOptions is an alternative to the others,
+  so price each one as a complete round trip in its own right.
 `;
 
 function calculateDays(startDate: string, endDate: string): number {
@@ -115,9 +138,45 @@ function calculateDays(startDate: string, endDate: string): number {
     return Math.max(1, diff + 1);
 }
 
+/**
+ * Renders the live SerpApi shortlist into the prompt so the model anchors the
+ * stay to a hotel that actually exists and is actually bookable for these
+ * dates, instead of hallucinating a plausible-sounding name.
+ *
+ * Only the fields that should influence the model's choice are included —
+ * photos, booking links and review breakdowns are spent context here, and the
+ * real listing data is reattached after generation in itinerary.service.ts.
+ */
+function buildHotelSection(hotels: Hotel[]): string {
+    if (hotels.length === 0) return "";
+
+    const lines = hotels
+        .slice(0, 8)
+        .map((hotel, index) => {
+            const rating = hotel.rating
+                ? `${hotel.rating}/5 from ${hotel.reviewsCount ?? 0} reviews`
+                : "unrated";
+            const stars = hotel.hotelClass ? `${hotel.hotelClass}-star, ` : "";
+            return `${index + 1}. ${hotel.name} — INR ${hotel.pricePerNight}/night, ${stars}${rating}, ${hotel.location}`;
+        })
+        .join("\n");
+
+    return `
+REAL AVAILABLE HOTELS (live prices for these exact dates):
+${lines}
+
+Pick exactly ONE of the hotels above for "accommodation".
+Copy its name EXACTLY as written.
+Use its listed price for "pricePerNight".
+Choose the one that best fits the accommodation preference and budget.
+Do NOT invent a hotel that is not in this list.
+`;
+}
+
 function buildItineraryPrompt(
     input: DirectItineraryInput,
-    userProfile?: any
+    userProfile?: any,
+    hotels: Hotel[] = []
 ): string {
     const totalDays = calculateDays(
         input.startDate,
@@ -213,10 +272,11 @@ ${input.wheelchairAccessible ? "Yes" : "No"}
 Special requests:
 ${input.specialRequests || "None"}
 
-Total budget:
+Preferred total budget (a ceiling for the whole trip, travel included — come in at or under it, do not spend up to it):
 ${input.budget ? `INR ${input.budget}` : "Not specified"}
 
 ${profile}
+${buildHotelSection(hotels)}
 
 CREATE EXACTLY ${totalDays} DAYS.
 
@@ -294,7 +354,8 @@ budget_range
 
     async generateDirectItinerary(
         input: DirectItineraryInput,
-        userId: string
+        userId: string,
+        hotels: Hotel[] = []
     ): Promise<any> {
         const userProfile =
             await userRepository.findProfileByUserId(userId);
@@ -325,7 +386,8 @@ budget_range
         const result = await generateJson<any>({
             prompt: buildItineraryPrompt(
                 input,
-                userProfile
+                userProfile,
+                hotels
             ),
             system: ITINERARY_SYSTEM_PROMPT,
             temperature: 0.35,

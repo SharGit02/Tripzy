@@ -1,274 +1,176 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { MapPin, Compass, Calendar, LineChart, Plane } from "lucide-react";
+import { MapPin, Compass, Calendar, LineChart, Plane, Route } from "lucide-react";
+
+const steps = [
+  {
+    num: "01",
+    tag: "Choose",
+    title: "Tell us where you want to go.",
+    description:
+      "Pick any region across India's heritage circuits, coastlines and mountain valleys.",
+    icon: MapPin,
+  },
+  {
+    num: "02",
+    tag: "Discover",
+    title: "Pick the places you actually want to see.",
+    description:
+      "Browse curated attractions for the region and keep the ones that fit your trip.",
+    icon: Compass,
+  },
+  {
+    num: "03",
+    tag: "Plan",
+    title: "Set your dates and duration.",
+    description: "Say when you are travelling and how many days you have to explore.",
+    icon: Calendar,
+  },
+  {
+    num: "04",
+    tag: "Compare",
+    title: "See travel options and predicted fares.",
+    description:
+      "Compare flight, train and bus options against ML fare estimates before you commit.",
+    icon: LineChart,
+  },
+  {
+    num: "05",
+    tag: "Go",
+    title: "Take your itinerary with you.",
+    description: "Get a day-by-day plan you can save, export as PDF or email yourself.",
+    icon: Plane,
+  },
+];
 
 export default function HowItWorksSection() {
   const [activeStep, setActiveStep] = useState(0);
 
-  const steps = [
-    {
-      num: "01",
-      tag: "CHOOSE",
-      title: "Tell us where you want to go.",
-      description: "Pick any destination across India's vibrant states and heritage circuits.",
-      icon: MapPin,
-      offsetClass: "lg:translate-y-0",
-      color: "#1C39BB",
-    },
-    {
-      num: "02",
-      tag: "DISCOVER",
-      title: "Pick the places and experiences you want to visit.",
-      description: "Browse top attraction recommendations tailored to your trip duration.",
-      icon: Compass,
-      offsetClass: "lg:translate-y-5",
-      color: "#133C55",
-    },
-    {
-      num: "03",
-      tag: "PLAN",
-      title: "Set your travel dates and duration.",
-      description: "Configure when you are traveling and how long you plan to explore.",
-      icon: Calendar,
-      offsetClass: "lg:translate-y-10",
-      color: "#14b8a6",
-    },
-    {
-      num: "04",
-      tag: "EXPLORE",
-      title: "View travel options, historical prices and predicted fares.",
-      description: "Analyze smart price estimates across flight, train, and bus options.",
-      icon: LineChart,
-      offsetClass: "lg:translate-y-15",
-      color: "#2563EB",
-    },
-    {
-      num: "05",
-      tag: "GO",
-      title: "Get your personalized itinerary and take it with you.",
-      description: "Receive your complete day-by-day itinerary ready to save or print.",
-      icon: Plane,
-      offsetClass: "lg:translate-y-20",
-      color: "#0f2442",
-    },
-  ];
-
-  /* ── Serial active step highlight cycle (0 -> 1 -> 2 -> 3 -> 4) ── */
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveStep((prev) => (prev + 1) % steps.length);
-    }, 2200);
+    }, 3200);
     return () => clearInterval(timer);
-  }, [steps.length]);
+  }, []);
+
+  const progress = ((activeStep + 1) / steps.length) * 100;
 
   return (
     <section
       id="how-it-works"
-      className="relative py-20 px-6 overflow-hidden bg-white"
+      className="relative py-24 px-6 overflow-hidden"
+      style={{
+        background: "linear-gradient(165deg, #0D324D 0%, #133C55 45%, #050D1A 100%)",
+      }}
     >
-      {/* Background ambient lighting */}
+      {/* Ambient glows */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-10 pointer-events-none"
-        style={{ background: "#1C39BB", filter: "blur(130px)" }}
+        className="absolute -top-24 -left-20 w-[480px] h-[480px] rounded-full pointer-events-none opacity-30"
+        style={{ background: "#386FA4", filter: "blur(150px)" }}
+      />
+      <div
+        className="absolute -bottom-32 right-0 w-[420px] h-[420px] rounded-full pointer-events-none opacity-25"
+        style={{ background: "#14b8a6", filter: "blur(150px)" }}
       />
 
-      <div className="max-w-6xl mx-auto relative z-10">
-        {/* Section Header */}
+      <div className="relative z-10 max-w-6xl mx-auto">
+        {/* ── Header ── */}
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="text-center max-w-3xl mx-auto mb-14"
+          className="max-w-3xl mb-14"
         >
-          <span className="inline-block px-3.5 py-1 rounded-md text-xs font-bold tracking-wider text-[#1C39BB] bg-[#1C39BB]/10 uppercase mb-4 font-sans-secondary border border-[#1C39BB]/20">
-            Workflow
+          <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[11px] font-bold tracking-[0.18em] text-[#91E5F6] bg-white/10 border border-[#91E5F6]/30 uppercase mb-5">
+            <Route size={13} strokeWidth={2.6} />
+            How it works
           </span>
-          <h2 className="font-display font-extrabold text-[#0f2442] text-3xl sm:text-4xl lg:text-5xl leading-tight mb-4">
-            From destination to departure.
+          <h2 className="font-display font-black text-white text-3xl sm:text-4xl lg:text-5xl leading-[1.08] tracking-tight mb-4">
+            From destination to departure, in five steps.
           </h2>
-          <p className="text-[#133C55]/75 text-base sm:text-lg leading-relaxed font-sans-secondary font-medium">
-            Tell us where you're going. We'll help you figure out the rest.
+          <p className="text-white/70 text-base sm:text-lg leading-relaxed font-sans-dm font-medium">
+            Tell us where you are going. We will help you work out the rest.
           </p>
         </motion.div>
 
-        {/* ── CONNECTED STAIRCASE LAYOUT WITH SLOW DRAWING LINE ── */}
-        <div className="relative pt-2 pb-24 lg:pb-32">
-
-          {/* Desktop Connected Staircase SVG Line — Appears Slowly */}
-          <div className="hidden lg:block absolute inset-0 pointer-events-none z-0">
-            <svg className="w-full h-full" overflow="visible" viewBox="0 0 1000 320">
-              <defs>
-                <linearGradient id="compactStairGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#1C39BB" />
-                  <stop offset="30%" stopColor="#133C55" />
-                  <stop offset="60%" stopColor="#14b8a6" />
-                  <stop offset="85%" stopColor="#2563EB" />
-                  <stop offset="100%" stopColor="#0f2442" />
-                </linearGradient>
-              </defs>
-
-              {/* Tighter Connected Stair Path Line — Animates slowly on scroll */}
-              <motion.path
-                d="M 170 50 L 230 50 L 230 70 L 370 70 L 430 70 L 430 90 L 570 90 L 630 90 L 630 110 L 770 110 L 830 110 L 830 130 L 970 130"
-                fill="none"
-                stroke="url(#compactStairGradient)"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeDasharray="6 4"
-                initial={{ pathLength: 0, opacity: 0 }}
-                whileInView={{ pathLength: 1, opacity: 1 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 2.8, ease: "easeInOut" }}
-              />
-
-              {/* Stair Joint Dots — Appear serially */}
-              {[
-                { cx: 230, cy: 50, color: "#1C39BB", delay: 0.6 },
-                { cx: 430, cy: 70, color: "#133C55", delay: 1.2 },
-                { cx: 630, cy: 90, color: "#14b8a6", delay: 1.8 },
-                { cx: 830, cy: 110, color: "#2563EB", delay: 2.4 },
-              ].map((dot, i) => (
-                <motion.circle
-                  key={i}
-                  cx={dot.cx}
-                  cy={dot.cy}
-                  r="5"
-                  fill={dot.color}
-                  initial={{ scale: 0, opacity: 0 }}
-                  whileInView={{ scale: 1, opacity: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: dot.delay, duration: 0.4 }}
-                />
-              ))}
-            </svg>
+        {/* ── Rail + steps ── */}
+        <div className="relative">
+          {/* Horizontal rail (desktop) */}
+          <div className="hidden lg:block absolute left-0 right-0 top-[38px] h-px bg-white/15">
+            <motion.div
+              className="h-px origin-left"
+              style={{
+                background: "linear-gradient(90deg, #59A5D8, #91E5F6, #14b8a6)",
+                boxShadow: "0 0 12px rgba(145,229,246,0.8)",
+              }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            />
           </div>
 
-          {/* Grid of Floating Stair Steps */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 sm:gap-6 relative z-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 lg:gap-5">
             {steps.map((step, index) => {
-              const IconComp = step.icon;
+              const Icon = step.icon;
               const isActive = index === activeStep;
+              const isPast = index < activeStep;
 
               return (
-                <div key={step.num} className="relative">
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-40px" }}
-                    transition={{
-                      duration: 0.5,
-                      delay: index * 0.08,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                    className={`relative ${step.offsetClass}`}
+                <motion.button
+                  key={step.num}
+                  type="button"
+                  onClick={() => setActiveStep(index)}
+                  initial={{ opacity: 0, y: 22 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-40px" }}
+                  transition={{
+                    duration: 0.5,
+                    delay: index * 0.08,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="relative text-left group focus:outline-none"
+                  aria-current={isActive ? "step" : undefined}
+                >
+                  {/* Node on the rail */}
+                  <span
+                    className={`relative z-10 flex items-center justify-center w-[76px] h-[76px] rounded-2xl border transition-all duration-500 ${
+                      isActive
+                        ? "border-[#91E5F6] bg-[#91E5F6] text-[#0D324D] shadow-[0_0_30px_rgba(145,229,246,0.45)] scale-105"
+                        : isPast
+                          ? "border-[#59A5D8]/60 bg-[#133C55] text-[#91E5F6]"
+                          : "border-white/15 bg-white/5 text-white/60 group-hover:border-white/40"
+                    }`}
                   >
-                    {/* Slow Floating Motion Loop */}
-                    <motion.div
-                      animate={{ y: [0, -6, 0] }}
-                      transition={{
-                        duration: 3.5,
-                        repeat: Infinity,
-                        repeatType: "mirror",
-                        ease: "easeInOut",
-                        delay: index * 0.35,
-                      }}
-                      whileHover={{ scale: 1.03 }}
-                      onClick={() => setActiveStep(index)}
-                      className={`relative rounded-2xl p-5 bg-[#F4F9FD] border-2 transition-all duration-500 flex flex-col justify-between min-h-[220px] overflow-hidden cursor-pointer ${
+                    <Icon size={24} strokeWidth={2.2} />
+                    <span
+                      className={`absolute -top-2 -right-2 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold transition-colors ${
                         isActive
-                          ? "border-[#1C39BB] shadow-[0_10px_28px_rgba(28,57,187,0.22)] scale-[1.02]"
-                          : "border-[#133C55]/20 shadow-sm hover:shadow-md"
+                          ? "bg-[#0D324D] text-[#91E5F6]"
+                          : "bg-white/10 text-white/60"
                       }`}
-                      style={{
-                        borderTop: `5px solid ${step.color}`,
-                      }}
                     >
-                      {/* Moving Line Highlighting Card Border Serially */}
-                      {isActive && (
-                        <motion.div
-                          initial={{ x: "-100%" }}
-                          animate={{ x: "100%" }}
-                          transition={{
-                            duration: 2.2,
-                            ease: "easeInOut",
-                            repeat: Infinity,
-                          }}
-                          className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-[#1C39BB] to-transparent shadow-[0_0_12px_#1C39BB] z-20 pointer-events-none"
-                        />
-                      )}
+                      {step.num}
+                    </span>
+                  </span>
 
-                      {/* Stair Step Header */}
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <span
-                            className="font-display font-black text-xl tracking-tight transition-colors duration-300"
-                            style={{ color: isActive ? "#1C39BB" : step.color }}
-                          >
-                            {step.num}
-                          </span>
-                          <div
-                            className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-all duration-300 ${
-                              isActive
-                                ? "border-[#1C39BB] bg-[#1C39BB] text-white shadow-xs"
-                                : "border-[#133C55]/15 bg-white"
-                            }`}
-                          >
-                            <IconComp
-                              size={18}
-                              style={{ color: isActive ? "white" : step.color }}
-                              strokeWidth={2.3}
-                            />
-                          </div>
-                        </div>
-
-                        <span
-                          className="inline-block text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-md mb-2 font-sans-secondary border transition-all duration-300"
-                          style={{
-                            color: step.color,
-                            background: `${step.color}12`,
-                            borderColor: `${step.color}30`,
-                          }}
-                        >
-                          {step.tag}
-                        </span>
-
-                        <h3 className="font-display font-bold text-[#0f2442] text-sm sm:text-base leading-snug mb-1.5">
-                          {step.title}
-                        </h3>
-                      </div>
-
-                      {/* Description */}
-                      <p className="text-[#133C55]/80 text-xs leading-relaxed font-sans-secondary font-medium mt-1">
-                        {step.description}
-                      </p>
-
-                      {/* Stair Tread Base Accent */}
-                      <div
-                        className="w-full h-1 rounded-full mt-3 transition-all duration-300"
-                        style={{
-                          background: isActive
-                            ? "linear-gradient(90deg, #1C39BB, #14b8a6)"
-                            : step.color,
-                        }}
-                      />
-                    </motion.div>
-                  </motion.div>
-
-                  {/* Mobile & Tablet Vertical Connecting Line */}
-                  {index < steps.length - 1 && (
-                    <div className="lg:hidden flex justify-center py-1.5">
-                      <div
-                        className={`w-1 h-6 rounded-full transition-colors ${
-                          isActive
-                            ? "bg-[#1C39BB]"
-                            : "bg-gradient-to-b from-[#1C39BB] to-[#14b8a6]"
-                        }`}
-                      />
-                    </div>
-                  )}
-                </div>
+                  <p
+                    className={`mt-5 text-[10px] font-extrabold tracking-[0.2em] uppercase font-sans-dm transition-colors ${
+                      isActive ? "text-[#91E5F6]" : "text-white/45"
+                    }`}
+                  >
+                    {step.tag}
+                  </p>
+                  <h3 className="font-display font-bold text-white text-base leading-snug mt-1.5 mb-2">
+                    {step.title}
+                  </h3>
+                  <p
+                    className={`text-[13px] leading-relaxed font-sans-dm font-medium transition-colors ${
+                      isActive ? "text-white/80" : "text-white/55"
+                    }`}
+                  >
+                    {step.description}
+                  </p>
+                </motion.button>
               );
             })}
           </div>

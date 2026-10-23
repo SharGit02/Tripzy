@@ -24,7 +24,14 @@ const envSchema = z
         DATABASE_URL: z.string().min(1).optional(),
         NEON_URI: z.string().min(1).optional(),
 
-        JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
+        // 16 chars is a hard floor, not a recommendation. Every session cookie
+        // in the app is signed with this one HMAC key, so a guessable secret
+        // means anyone can mint a token for any user, including an admin. A
+        // short secret is also brute-forceable offline from a single captured
+        // token. 32+ random chars is the target; see the boot warning below.
+        JWT_SECRET: z
+            .string()
+            .min(16, "JWT_SECRET must be at least 16 characters — it signs every session token"),
 
         // OpenWeather API key. Optional so the rest of the app still boots
         // without it; the weather endpoint answers 503 when it is missing.
@@ -54,6 +61,12 @@ const envSchema = z
         NVIDIA_MODEL: z.string().trim().min(1).default("nvidia/nemotron-3.5-lightning-30b-a3b"),
         NVIDIA_MODEL_FALLBACKS: z.string().trim().optional(),
         NVIDIA_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+
+        // SerpApi key, used for the Google Hotels engine. Optional and
+        // degrades like OPEN_WEATHER_API: the hotels endpoint answers 503 and
+        // itinerary generation falls back to AI-suggested stays instead of
+        // blocking boot.
+        SERP_API_KEY: z.string().trim().min(1).optional(),
 
         // OAuth configuration (Google & GitHub)
         GOOGLE_CLIENT_ID: z.string().trim().optional(),
@@ -115,6 +128,17 @@ if (!parsed.success) {
 }
 
 const data = parsed.data;
+
+// Warned rather than rejected: raising the hard floor would lock out a running
+// deployment on its next boot, and rotating the secret signs every user out.
+// Loud enough not to be missed in deploy logs.
+if (data.JWT_SECRET.length < 32) {
+    console.warn(
+        `[SECURITY] JWT_SECRET is ${data.JWT_SECRET.length} characters. ` +
+        "Use 32+ random characters (`openssl rand -base64 48`). " +
+        "Rotating it invalidates all existing sessions."
+    );
+}
 
 export const env = {
     ...data,

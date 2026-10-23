@@ -38,6 +38,43 @@ function safeNumber(value: unknown): number {
 }
 
 /**
+ * Reads `itinerary.selections` into a predicate for "did the traveler keep
+ * this item?".
+ *
+ * Selections are stored as exclusions (see ItinerarySelectionsSchema), so an
+ * itinerary with no selections — every one saved before this feature existed —
+ * yields a predicate that keeps everything, and the PDF is byte-identical to
+ * what it was. The key strings are built identically here and in
+ * ItineraryResults.jsx; they are positional, which is sound because the PDF is
+ * rendered from the same stored document the checkboxes were ticked against.
+ */
+export function buildSelectionFilter(itinerary: ItineraryOutput): (key: string) => boolean {
+    const excluded = new Set(
+        Array.isArray((itinerary as any)?.selections?.excluded)
+            ? (itinerary as any).selections.excluded.map(String)
+            : [],
+    );
+
+    if (excluded.size === 0) return () => true;
+    return (key: string) => !excluded.has(key);
+}
+
+type SelectedFlight = {
+    airline?: string;
+    flightNumber?: string | number;
+    date?: string;
+    dayOfWeek?: string;
+    predictedFare?: number;
+    origin?: string;
+    destination?: string;
+};
+
+function selectedFlights(itinerary: ItineraryOutput): SelectedFlight[] {
+    const flights = (itinerary as any)?.selections?.flights;
+    return Array.isArray(flights) ? flights : [];
+}
+
+/**
  * PDFKit's built-in Helvetica does not reliably render the INR glyph.
  * Use "INR" in generated PDFs instead of producing tofu/square characters.
  */
@@ -337,8 +374,19 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
     const width = PAGE.width;
     const amenities = Array.isArray(acc.amenities) ? acc.amenities.slice(0, 6) : [];
 
+    // A real SerpApi listing has a rating, a star class and a review count
+    // worth printing; an AI-suggested stay has none of them and the line is
+    // skipped rather than printed empty.
+    const ratingBits = [
+        acc.rating ? `${acc.rating}/5` : "",
+        acc.reviewsCount ? `${acc.reviewsCount.toLocaleString("en-IN")} reviews` : "",
+        acc.hotelClass ? `${acc.hotelClass}-star` : "",
+        acc.locationRating ? `Location ${acc.locationRating}/5` : "",
+    ].filter(Boolean).join("  |  ");
+
     let height = 105;
     if (amenities.length > 0) height += 18;
+    if (ratingBits) height += 15;
     if ((acc.description || "").length > 260) height += 20;
 
     roundedCard(doc, x, y, width, height, COLORS.white);
@@ -367,6 +415,14 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
 
     let cursorY = y + 51;
 
+    if (ratingBits) {
+        doc.fillColor(COLORS.green)
+            .font("Helvetica-Bold")
+            .fontSize(8)
+            .text(ratingBits, x + 14, cursorY, { width: width - 28 });
+        cursorY += 15;
+    }
+
     if (amenities.length > 0) {
         doc.fillColor(COLORS.text)
             .font("Helvetica")
@@ -384,6 +440,19 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
             width: width - 28,
             lineGap: 1.5,
         });
+
+    const highlights = Array.isArray(acc.reviewHighlights)
+        ? acc.reviewHighlights.slice(0, 4)
+        : [];
+
+    if (highlights.length > 0) {
+        doc.fillColor(COLORS.muted)
+            .font("Helvetica-Oblique")
+            .fontSize(7.5)
+            .text(`Guests liked: ${highlights.join(", ")}`, x + 14, y + height - 16, {
+                width: width - 28,
+            });
+    }
 
     doc.y = y + height + 12;
 }
@@ -499,7 +568,11 @@ function addActivity(doc: PDFDoc, activity: ItineraryDayActivity): void {
     doc.y = y + height + 7;
 }
 
-function addDay(doc: PDFDoc, day: ItineraryOutput["days"][number]): void {
+function addDay(
+    doc: PDFDoc,
+    day: ItineraryOutput["days"][number],
+    isSelected: (key: string) => boolean = () => true,
+): void {
     // Keep one day together where possible, but allow it to span pages naturally.
     ensureSpace(doc, 95);
 
@@ -526,7 +599,9 @@ function addDay(doc: PDFDoc, day: ItineraryOutput["days"][number]): void {
 
     doc.moveDown(0.6);
 
-    const activities = Array.isArray(day.activities) ? day.activities : [];
+    const activities = (Array.isArray(day.activities) ? day.activities : []).filter(
+        (_activity, index) => isSelected(`activity:${day.day}:${index}`),
+    );
 
     activities.forEach((activity) => {
         addActivity(doc, activity);
@@ -569,10 +644,28 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
             doc.on("error", reject);
 
             const b = itinerary.budgetBreakdown;
-            const accommodations = Array.isArray(itinerary.accommodations) ? itinerary.accommodations : [];
-            const places = Array.isArray(itinerary.placesToVisit) ? itinerary.placesToVisit : [];
-            const transport = Array.isArray(itinerary.transportOptions) ? itinerary.transportOptions : [];
-            const days = Array.isArray(itinerary.days) ? itinerary.days : [];
+
+            // Everything the traveler ticked off in the UI is dropped here, so
+            // the PDF is the chosen trip rather than the whole menu. Filtering
+            // by original index keeps the keys stable regardless of how many
+            // items each section later slices for layout.
+            const isSelected = buildSelectionFilter(itinerary);
+            const flights = selectedFlights(itinerary);
+
+            const accommodations = (Array.isArray(itinerary.accommodations) ? itinerary.accommodations : [])
+                .filter((_acc, index) => isSelected(`hotel:${index}`));
+            const places = (Array.isArray(itinerary.placesToVisit) ? itinerary.placesToVisit : [])
+                .filter((_place, index) => isSelected(`place:${index}`));
+            const transport = (Array.isArray(itinerary.transportOptions) ? itinerary.transportOptions : [])
+                .filter((_t, index) => isSelected(`transport:${index}`));
+            const days = (Array.isArray(itinerary.days) ? itinerary.days : [])
+                // A day whose every activity was unticked would otherwise print
+                // as a bare heading, so it drops out entirely.
+                .filter((day) =>
+                    (Array.isArray(day.activities) ? day.activities : []).some(
+                        (_activity, index) => isSelected(`activity:${day.day}:${index}`),
+                    ),
+                );
             const tips = Array.isArray(itinerary.tips) ? itinerary.tips : [];
 
             // =========================================================
@@ -676,9 +769,15 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
                 drawPageHeader(doc);
                 doc.y = 62;
 
-                addTitle(doc, "Where to Stay", "Recommended accommodation options");
+                addTitle(
+                    doc,
+                    "Where to Stay",
+                    accommodations.some((acc) => (acc as any).source === "serpapi")
+                        ? "Live availability and rates for your dates"
+                        : "Recommended accommodation options",
+                );
 
-                accommodations.slice(0, 3).forEach((acc, index) => {
+                accommodations.slice(0, 8).forEach((acc, index) => {
                     addAccommodationCard(doc, acc, index);
                 });
             }
@@ -713,8 +812,86 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
                         .stroke();
                     doc.y += 14;
                 }
-                addDay(doc, day);
+                addDay(doc, day, isSelected);
             });
+
+            // Chosen flights. Unlike every other section these are inclusions
+            // (see ItinerarySelectionsSchema): flight fares are predicted
+            // client-side by the ML service and are not part of the generated
+            // itinerary document, so only the ones the traveler actually ticked
+            // were ever stored.
+            if (flights.length > 0) {
+                doc.addPage();
+                drawPageHeader(doc);
+                doc.y = 62;
+
+                addTitle(doc, "Your Flights", "Selected from predicted fares");
+
+                flights.slice(0, 10).forEach((flight) => {
+                    ensureSpace(doc, 82);
+
+                    const y = doc.y;
+                    roundedCard(doc, PAGE.left, y, PAGE.width, 66, COLORS.white);
+
+                    doc.fillColor(COLORS.blue)
+                        .font("Helvetica-Bold")
+                        .fontSize(8)
+                        .text(
+                            String(flight.airline || "Flight").toUpperCase(),
+                            PAGE.left + 14,
+                            y + 12,
+                            { width: PAGE.width - 160 },
+                        );
+
+                    if (flight.predictedFare !== undefined) {
+                        doc.fillColor(COLORS.navy)
+                            .font("Helvetica-Bold")
+                            .fontSize(11)
+                            .text(
+                                formatCurrency(flight.predictedFare),
+                                PAGE.left + PAGE.width - 145,
+                                y + 12,
+                                { width: 130, align: "right" },
+                            );
+                    }
+
+                    doc.fillColor(COLORS.navy)
+                        .font("Helvetica-Bold")
+                        .fontSize(10)
+                        .text(
+                            `${flight.origin || ""}  ->  ${flight.destination || ""}`,
+                            PAGE.left + 14,
+                            y + 28,
+                            { width: PAGE.width - 160 },
+                        );
+
+                    doc.fillColor(COLORS.muted)
+                        .font("Helvetica")
+                        .fontSize(8)
+                        .text(
+                            [
+                                flight.flightNumber ? `Flight ${flight.flightNumber}` : "",
+                                flight.date ? formatDate(String(flight.date)) : "",
+                                flight.dayOfWeek || "",
+                            ].filter(Boolean).join("  |  "),
+                            PAGE.left + 14,
+                            y + 46,
+                            { width: PAGE.width - 28 },
+                        );
+
+                    doc.y = y + 78;
+                });
+
+                doc.fillColor(COLORS.muted)
+                    .font("Helvetica-Oblique")
+                    .fontSize(7.5)
+                    .text(
+                        "Fares are model estimates for these dates, not quotes, and will differ at booking.",
+                        PAGE.left,
+                        doc.y + 4,
+                        { width: PAGE.width },
+                    );
+            }
 
             // Transport
             if (transport.length > 0) {

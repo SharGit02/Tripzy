@@ -2,25 +2,33 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { env } from "../config/env.js";
 import { JWTPayload } from "../types/auth.types.js";
-
 import crypto from "crypto";
+
+const JWT_ALGORITHM = "HS256" as const;
 
 export class AuthService {
     generateAccessToken(payload: JWTPayload): string {
         return jwt.sign({ ...payload, type: "access" }, env.JWT_SECRET, {
             expiresIn: "15m",
+            algorithm: JWT_ALGORITHM,
         });
     }
 
     generateRefreshToken(payload: JWTPayload): string {
         return jwt.sign({ ...payload, type: "refresh" }, env.JWT_SECRET, {
             expiresIn: "7d",
+            algorithm: JWT_ALGORITHM,
         });
     }
 
     verifyToken(token: string): JWTPayload {
         try {
-            const decoded = jwt.verify(token, env.JWT_SECRET) as JWTPayload;
+            // The algorithm is pinned on verify, not just on sign. Left open,
+            // verification accepts any algorithm the key happens to satisfy,
+            // which is the shape of the classic JWT algorithm-confusion bug.
+            const decoded = jwt.verify(token, env.JWT_SECRET, {
+                algorithms: [JWT_ALGORITHM],
+            }) as JWTPayload;
             return decoded;
         } catch (error) {
             throw new Error("Invalid or expired token");

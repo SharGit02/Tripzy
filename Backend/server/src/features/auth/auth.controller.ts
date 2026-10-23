@@ -46,40 +46,30 @@ export async function signup(req: Request, res: Response): Promise<void> {
     try {
         const parsed = signupSchema.safeParse(req.body);
         if (!parsed.success) {
-            console.log("[SIGNUP] Validation error:", parsed.error.flatten().fieldErrors);
             res.status(400).json({ message: "Invalid signup data.", errors: parsed.error.flatten().fieldErrors });
             return;
         }
 
         const { name, email, password } = parsed.data;
-        console.log("[SIGNUP] Parsed data:", { name, email, password: "***" });
 
         const passwordCheck = authService.validatePassword(password);
         if (!passwordCheck.valid) {
-            console.log("[SIGNUP] Password validation failed:", passwordCheck.message);
             res.status(400).json({ message: passwordCheck.message });
             return;
         }
 
-        console.log("[SIGNUP] Checking existing user...");
         const existingUser = await userRepository.findByEmail(email);
-        console.log("[SIGNUP] Existing user check done:", existingUser ? "found" : "not found");
         if (existingUser) {
-            console.log("[SIGNUP] User already exists:", email);
             res.status(409).json({ message: "An account with that email already exists." });
             return;
         }
 
-        console.log("[SIGNUP] Hashing password...");
         const hashedPassword = await authService.hashPassword(password);
-        console.log("[SIGNUP] Password hashed");
         const user = await userRepository.create({
             name,
             email,
             password: hashedPassword,
         });
-        console.log("[SIGNUP] User created:", user.id);
-
         const payload = {
             userId: user.id,
             email: user.email,
@@ -95,8 +85,10 @@ export async function signup(req: Request, res: Response): Promise<void> {
             user: toPublicUser(user),
         });
     } catch (error) {
+        // Logged server-side, never returned: the raw message can carry
+        // Postgres and driver internals (constraint names, host, SQL).
         console.error("[SIGNUP] Error:", error);
-        res.status(500).json({ message: "Unable to create account.", error: error instanceof Error ? error.message : "Unknown error" });
+        res.status(500).json({ message: "Unable to create account." });
     }
 }
 
@@ -112,14 +104,15 @@ export async function login(req: Request, res: Response): Promise<void> {
 
         const user = await userRepository.findByEmail(email);
         if (!user) {
-            console.log("[LOGIN] User not found:", email);
+            // No email in the log line, and the same generic message either
+            // way, so neither the logs nor the response reveal which accounts
+            // exist.
             res.status(401).json({ message: "Invalid email or password." });
             return;
         }
 
         const passwordMatches = await authService.comparePasswords(password, user.password);
         if (!passwordMatches) {
-            console.log("[LOGIN] Password mismatch for:", email);
             res.status(401).json({ message: "Invalid email or password." });
             return;
         }
@@ -140,7 +133,7 @@ export async function login(req: Request, res: Response): Promise<void> {
         });
     } catch (error) {
         console.error("[LOGIN] Error:", error);
-        res.status(500).json({ message: "Unable to sign in.", error: error instanceof Error ? error.message : "Unknown error" });
+        res.status(500).json({ message: "Unable to sign in." });
     }
 }
 

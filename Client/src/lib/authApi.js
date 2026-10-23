@@ -2,6 +2,10 @@
 const isProd = import.meta.env.MODE === "production";
 const API_BASE_URL = isProd ? "" : (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/+$/, "");
 
+// Render free/starter instances spin down when idle and can take ~30-50s to
+// wake, so the first request after a quiet period is slow rather than broken.
+const REQUEST_TIMEOUT_MS = 50_000;
+
 const AUTH_PATHS_EXEMPT_FROM_REFRESH = ["/auth/login", "/auth/signup", "/auth/refresh", "/auth/logout"];
 
 function flattenApiFieldErrors(data) {
@@ -38,8 +42,11 @@ function toUserError(path, status, data) {
   if (status === 429) {
     return "Too many attempts. Please wait a moment and try again.";
   }
+  if (status === 502 || status === 504) {
+    return "Our server isn't responding yet. It may still be starting up — please try again in a moment.";
+  }
   if (status === 503) {
-    return serverMessage || "The trip planner isn't available right now. Please try again in a moment.";
+    return serverMessage || "Our server is temporarily unavailable. Please try again in a moment.";
   }
   if (status >= 500) {
     return serverMessage || "Tripzy ran into a problem on our side. Please try again in a moment.";
@@ -48,6 +55,26 @@ function toUserError(path, status, data) {
     return serverMessage;
   }
   return "Something went wrong. Please try again.";
+}
+
+function toNetworkError(error) {
+  // AbortSignal.timeout fires a TimeoutError; an explicit abort fires AbortError.
+  if (error?.name === "TimeoutError") {
+    return new Error(
+      `Our server took too long to respond (over ${Math.round(
+        REQUEST_TIMEOUT_MS / 1000
+      )}s). It may be waking up from idle — please try again.`
+    );
+  }
+  if (error?.name === "AbortError") {
+    return new Error("That request was cancelled. Please try again.");
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return new Error("You appear to be offline. Check your internet connection and try again.");
+  }
+  // fetch() rejects with a TypeError for DNS failures, refused connections,
+  // TLS problems and CORS blocks — from the browser they're indistinguishable.
+  return new Error("We couldn't reach the Tripzy server. It may be down or restarting — please try again shortly.");
 }
 
 async function rawFetch(path, options = {}) {
@@ -59,12 +86,13 @@ async function rawFetch(path, options = {}) {
       },
       credentials: "include",
       ...options,
+      signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     const data = await response.json().catch(() => ({}));
     return { response, data };
-  } catch {
-    throw new Error("We couldn't reach Tripzy right now. Check your connection and try again.");
+  } catch (error) {
+    throw toNetworkError(error);
   }
 }
 
@@ -162,6 +190,16 @@ export function fetchWeather(city) {
   return request(`/weather?city=${encodeURIComponent(city)}`);
 }
 
+export function fetchHotels({ destination, checkIn, checkOut, adults = 2 }) {
+  const params = new URLSearchParams({
+    destination,
+    checkIn,
+    checkOut,
+    adults: String(adults),
+  });
+  return request(`/hotels?${params.toString()}`);
+}
+
 export function fetchFlightFarePrediction(payload) {
   return request("/flight-fare/predict", {
     method: "POST",
@@ -207,13 +245,17 @@ export function fetchItineraryById(id) {
 export async function downloadItineraryPdf(id) {
   const urls = [`${API_BASE_URL}/api/plan/${id}/pdf`, `${API_BASE_URL}/api/itinerary/${id}/pdf`];
   let response;
-  let lastData = {};
 
   for (const url of urls) {
-    response = await fetch(url, {
-      method: "GET",
-      credentials: "include",
-    });
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw toNetworkError(error);
+    }
     if (response.status !== 404) break;
   }
 
@@ -221,8 +263,8 @@ export async function downloadItineraryPdf(id) {
     let message = "We couldn't download the itinerary PDF. Please try again.";
 
     try {
-      lastData = await response.json();
-      message = lastData.message || flattenApiFieldErrors(lastData) || message;
+      const data = await response.json();
+      message = data.message || flattenApiFieldErrors(data) || message;
     } catch {
       // Response wasn't JSON.
     }
@@ -243,6 +285,15 @@ export function regenerateItinerary(id, modifications) {
   return request(`/plan/${id}/regenerate`, {
     method: "POST",
     body: JSON.stringify({ modifications, preserveStructure: true }),
+  });
+}
+
+// Which items the traveler ticked. Patched on its own so toggling one checkbox
+// never round-trips the whole itinerary document.
+export function saveItinerarySelections(id, selections) {
+  return request(`/plan/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ selections }),
   });
 }
 

@@ -5,6 +5,8 @@ import { generateItineraryPdf } from "../../services/pdf/pdf.service.js";
 import { formatItineraryForDisplay } from "./itinerary.formatter.js";
 import {
     DirectItineraryInputSchema,
+    ItineraryDayPatchSchema,
+    ItinerarySelectionsSchema,
     RegenerateInputSchema,
     formatZodError,
 } from "./itinerary.schema.js";
@@ -242,12 +244,33 @@ export async function regenerateItinerary(req: Request, res: Response): Promise<
     }
 }
 
-const UpdateItineraryBodySchema = z.object({
-    title: z.string().trim().min(1).max(200).optional(),
-    status: z.string().optional(),
-    itineraryData: z.any().optional(),
-    days: z.array(z.any()).optional(),
-});
+/*
+ * Note what is NOT here: `itineraryData`.
+ *
+ * It used to be accepted as `z.any()`, which let any authenticated user
+ * overwrite the entire stored document for their own itinerary — including
+ * the accommodation `bookingLink` / `imageUrl` and place `imageUrl` fields
+ * that are rendered into href/src attributes. Because an itinerary is
+ * publicly shareable (/share/:id), that turned a self-service write into
+ * stored XSS against anyone opening the share link, and it also let a client
+ * write a document shape that bypasses every generator-side invariant.
+ *
+ * No client ever sent it: the day editor sends `days`, the checkboxes send
+ * `selections`. So the field is simply gone, and the two legitimate shapes
+ * are validated structurally instead.
+ */
+const UpdateItineraryBodySchema = z
+    .object({
+        title: z.string().trim().min(1).max(200).optional(),
+        status: z.enum(["draft", "completed", "archived"]).optional(),
+        days: z.array(ItineraryDayPatchSchema).max(60).optional(),
+        // Which items the traveler ticked. Patched on its own so toggling a
+        // checkbox never has to round-trip the whole itinerary document.
+        selections: ItinerarySelectionsSchema.optional(),
+    })
+    .refine((body) => Object.values(body).some((value) => value !== undefined), {
+        message: "Nothing to update.",
+    });
 
 export async function updateItinerary(req: Request, res: Response): Promise<void> {
     try {
@@ -265,9 +288,23 @@ export async function updateItinerary(req: Request, res: Response): Promise<void
         }
 
         const current = presentItinerary(saved) || {};
-        let itineraryData = parsed.data.itineraryData;
+        // Always rebuilt from the stored document, never taken from the
+        // request, so a patch can only ever change `days` and `selections`.
+        let itineraryData: Record<string, unknown> | undefined;
         if (parsed.data.days) {
             itineraryData = { ...current, days: parsed.data.days };
+        }
+        // Merged onto whatever the document already is — including a
+        // `days` patch arriving in the same request — so a selection change
+        // never silently drops the rest of the itinerary.
+        if (parsed.data.selections) {
+            itineraryData = {
+                ...(itineraryData ?? current),
+                selections: {
+                    ...parsed.data.selections,
+                    updatedAt: new Date().toISOString(),
+                },
+            };
         }
 
         const updated = await itineraryService.updateItinerary(id, req.user!.userId, {

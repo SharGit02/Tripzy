@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -35,9 +35,16 @@ import {
   Landmark,
   Accessibility,
   ChevronDown,
+  TriangleAlert,
 } from "lucide-react";
 import { CITIES_LIST, useLocationContext } from "../../../context/LocationContext";
 import LocationDropdown from "../../../components/layout/LocationDropdown";
+import { ACCOMMODATION, TRANSPORT } from "../lib/boardingPassToItinerary";
+import {
+  estimateMinimumBudget,
+  formatInr,
+  roundUpToSuggestion,
+} from "../lib/minimumBudget";
 
 // ── Persian Blue Color Token ──
 const PERSIAN_BLUE = "#1C3F94";
@@ -313,6 +320,32 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
     setEndDate(e);
   };
 
+  /*
+   * Floor estimate for the trip as described so far. The budget the traveller
+   * types is a preference, so we never block on it — but if it cannot cover
+   * the trip, say so before they spend a generation on it.
+   */
+  const minimum = useMemo(
+    () =>
+      estimateMinimumBudget({
+        startDate,
+        endDate,
+        adults,
+        children,
+        rooms,
+        accommodationType: ACCOMMODATION[accommodation] || "standard",
+        preferredTransport: TRANSPORT[transport] || "flight",
+      }),
+    [startDate, endDate, adults, children, rooms, accommodation, transport]
+  );
+
+  const budgetAmount = Number(String(budget).replace(/[^\d.]/g, ""));
+  const budgetBelowMinimum =
+    minimum && Number.isFinite(budgetAmount) && budgetAmount > 0
+      ? budgetAmount < minimum.total
+      : false;
+  const suggestedBudget = minimum ? roundUpToSuggestion(minimum.total) : 0;
+
   const handleInterestToggle = (interest) => {
     if (selectedInterests.includes(interest)) {
       setSelectedInterests(selectedInterests.filter((i) => i !== interest));
@@ -582,16 +615,20 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
               </AnimatePresence>
             </div>
 
-            {/* BUDGET */}
-            <div className="min-w-0 border-b xl:border-r border-slate-100 flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors">
+            {/* PREFERRED BUDGET */}
+            <div
+              className={`min-w-0 border-b xl:border-r border-slate-100 flex items-start gap-3 px-5 xl:px-6 py-5 transition-colors ${
+                budgetBelowMinimum ? "bg-amber-50/70" : "hover:bg-blue-50/40"
+              }`}
+            >
               <IndianRupee
                 size={18}
                 className="flex-shrink-0 mt-1"
-                style={{ color: PERSIAN_BLUE }}
+                style={{ color: budgetBelowMinimum ? "#b45309" : PERSIAN_BLUE }}
               />
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                  Budget
+                  Preferred budget
                 </p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <input
@@ -599,12 +636,46 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                     value={budget}
                     onChange={(e) => setBudget(e.target.value)}
                     placeholder="Amount"
+                    aria-describedby="preferred-budget-hint"
+                    aria-invalid={budgetBelowMinimum || undefined}
                     className="block w-full min-w-0 text-sm font-bold text-gray-800 bg-transparent focus:outline-none placeholder:text-gray-500 placeholder:font-medium [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  Enter budget (₹)
+
+                <p
+                  id="preferred-budget-hint"
+                  className="text-[11px] text-gray-400 mt-0.5"
+                >
+                  {minimum
+                    ? `We aim for this, not at it. Min ~${formatInr(minimum.total)}`
+                    : "What you would like to spend (₹)"}
                 </p>
+
+                {budgetBelowMinimum && (
+                  <div
+                    role="status"
+                    className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-amber-800"
+                  >
+                    <TriangleAlert
+                      size={13}
+                      className="flex-shrink-0 mt-px"
+                      strokeWidth={2.6}
+                    />
+                    <span>
+                      {formatInr(minimum.total)} is about the floor for{" "}
+                      {minimum.days} day{minimum.days > 1 ? "s" : ""} and{" "}
+                      {minimum.people} traveller
+                      {minimum.people > 1 ? "s" : ""} including travel both ways.
+                      <button
+                        type="button"
+                        onClick={() => setBudget(String(suggestedBudget))}
+                        className="ml-1 font-bold underline underline-offset-2 hover:text-amber-950"
+                      >
+                        Use {formatInr(suggestedBudget)}
+                      </button>
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 

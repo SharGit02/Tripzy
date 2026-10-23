@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Loader2,
@@ -17,10 +17,13 @@ import {
   Plane,
   Bed,
   Activity,
-  Mail
+  Mail,
+  Star,
+  ExternalLink
 } from "lucide-react";
 import ItineraryMap from "./ItineraryMap";
-import { fetchFlightFarePrediction } from "../../lib/authApi";
+import { fetchFlightFarePrediction, saveItinerarySelections } from "../../lib/authApi";
+import { safeHttpUrl } from "../../lib/safeUrl";
 import { getBookingPlatforms } from "./bookingLinks";
 import PlaceTicketCard from "../../components/itinerary/PlaceTicketCard";
 import PriceHistoryGraph from "../../components/itinerary/PriceHistoryGraph";
@@ -176,7 +179,7 @@ function getFallbackFlights(origin, destination, dateStr) {
   ];
 }
 
-function FlightPredictions({ itinerary, source }) {
+function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight, selectable }) {
   const location = useLocation();
   const [flights, setFlights] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -308,7 +311,9 @@ function FlightPredictions({ itinerary, source }) {
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Top 3 flight predictions powered by the ML flight fare microservice
+            {selectable
+              ? "Tick the flight you want and it will be included in your PDF"
+              : "Top 3 flight predictions powered by the ML flight fare microservice"}
           </p>
         </div>
         <div className="mt-2 sm:mt-0">
@@ -324,12 +329,17 @@ function FlightPredictions({ itinerary, source }) {
           const airlineLogo = getAirlineLogo(flight.airline);
           const accent = getAirlineAccent(flight.airline);
           const isBest = index === 0;
+          const chosen = selectable && isFlightSelected?.(flight);
 
           return (
             <div
               key={index}
               className={`relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 ${
-                isBest ? "ring-2 ring-blue-400 ring-offset-2" : "border border-slate-200"
+                chosen
+                  ? "ring-2 ring-[#2563EB] ring-offset-2"
+                  : isBest
+                  ? "ring-2 ring-blue-400 ring-offset-2"
+                  : "border border-slate-200"
               }`}
             >
               {/* Best fare badge */}
@@ -339,6 +349,19 @@ function FlightPredictions({ itinerary, source }) {
                     ✦ BEST FARE
                   </span>
                 </div>
+              )}
+
+              {selectable && (
+                <label className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 shadow-md cursor-pointer">
+                  <SelectBox
+                    checked={Boolean(chosen)}
+                    onChange={() => onToggleFlight?.(flight)}
+                    label={`Include the ${flight.airline} flight ${flight.flightNumber} in my PDF`}
+                  />
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                    {chosen ? "Added" : "Add"}
+                  </span>
+                </label>
               )}
 
               {/* Hero: Plane photo — cropped to landscape banner */}
@@ -416,6 +439,167 @@ function FlightPredictions({ itinerary, source }) {
   );
 }
 
+
+/* ── Item selection ──────────────────────────────────────────────────────────
+ * Every item in a generated itinerary can be ticked or unticked, and only the
+ * ticked ones reach the downloaded PDF.
+ *
+ * Selections are stored as EXCLUSIONS, keyed by position, so that anything
+ * added later — a regenerated day, an activity typed into the day editor — is
+ * selected by default, and so that an itinerary saved before this feature
+ * existed renders and exports exactly as it used to. The same key strings are
+ * rebuilt server-side in pdf.service.ts.
+ */
+
+function selectionKey(kind, ...parts) {
+  return [kind, ...parts].join(":");
+}
+
+// Flights are predicted per-request by the ML service and are not part of the
+// stored itinerary, so a chosen flight is stored in full (an inclusion) rather
+// than as the absence of an exclusion.
+function flightKey(flight) {
+  return [flight?.airline, flight?.flightNumber, flight?.date].join("|");
+}
+
+function useItinerarySelections(itinerary, readOnly) {
+  const itineraryId = itinerary?.id;
+
+  const fromItinerary = () => ({
+    excluded: new Set(itinerary?.selections?.excluded || []),
+    flights: itinerary?.selections?.flights || [],
+  });
+
+  const [selections, setSelections] = useState(fromItinerary);
+  const [saveState, setSaveState] = useState("idle");
+
+  // Saves are chained rather than fired in parallel: each PATCH merges the
+  // whole selections object server-side, so two overlapping writes could
+  // otherwise land out of order and resurrect an unticked item.
+  const queue = useRef(Promise.resolve());
+
+  // Reloads the ticks when a DIFFERENT itinerary is shown. Done during render
+  // rather than in an effect (React's documented "adjust state when a prop
+  // changes" pattern) so there is no extra render pass showing the previous
+  // trip's selections.
+  //
+  // Keyed on the id alone, never on `itinerary`: that object is rebuilt on
+  // every save response, and re-syncing from it would clobber a tick the user
+  // made while the previous save was still in flight.
+  const [syncedId, setSyncedId] = useState(itineraryId);
+  if (syncedId !== itineraryId) {
+    setSyncedId(itineraryId);
+    setSelections(fromItinerary());
+    setSaveState("idle");
+  }
+
+  const persist = useCallback(
+    (next) => {
+      if (!itineraryId || readOnly) return;
+      setSaveState("saving");
+      queue.current = queue.current
+        .then(() =>
+          saveItinerarySelections(itineraryId, {
+            excluded: [...next.excluded],
+            flights: next.flights,
+          }),
+        )
+        .then(() => setSaveState("saved"))
+        .catch((err) => {
+          console.warn("Failed to save itinerary selections:", err);
+          setSaveState("error");
+        });
+    },
+    [itineraryId, readOnly],
+  );
+
+  // `selections` is read straight from the render that produced the handler,
+  // which is current by the time a click fires — React re-renders between user
+  // events, so there is no stale-closure window to guard against.
+  const commit = useCallback(
+    (next) => {
+      setSelections(next);
+      persist(next);
+    },
+    [persist],
+  );
+
+  const toggle = useCallback(
+    (key) => {
+      const excluded = new Set(selections.excluded);
+      if (excluded.has(key)) excluded.delete(key);
+      else excluded.add(key);
+      commit({ ...selections, excluded });
+    },
+    [commit, selections],
+  );
+
+  const toggleFlight = useCallback(
+    (flight) => {
+      const key = flightKey(flight);
+      const chosen = selections.flights.some((f) => flightKey(f) === key);
+      commit({
+        ...selections,
+        flights: chosen
+          ? selections.flights.filter((f) => flightKey(f) !== key)
+          : [...selections.flights, flight],
+      });
+    },
+    [commit, selections],
+  );
+
+  const isSelected = useCallback((key) => !selections.excluded.has(key), [selections]);
+
+  const isFlightSelected = useCallback(
+    (flight) => selections.flights.some((f) => flightKey(f) === flightKey(flight)),
+    [selections],
+  );
+
+  return { isSelected, isFlightSelected, toggle, toggleFlight, saveState, selections };
+}
+
+/**
+ * The tick box shown on every selectable item. Rendered as a real checkbox so
+ * it is keyboard reachable and announced by screen readers; `label` is what a
+ * screen reader reads, since the visible text belongs to the card around it.
+ */
+function SelectBox({ checked, onChange, label, className = "" }) {
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      aria-label={label}
+      className={`h-4 w-4 flex-shrink-0 cursor-pointer rounded border-slate-300 text-[#2563EB] accent-[#2563EB] focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1 ${className}`}
+    />
+  );
+}
+
+function SelectionStatus({ saveState }) {
+  if (saveState === "saving") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        <Loader2 size={12} className="animate-spin" /> Saving your picks...
+      </span>
+    );
+  }
+  if (saveState === "saved") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+        <CheckCircle size={12} /> Picks saved
+      </span>
+    );
+  }
+  if (saveState === "error") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600">
+        <AlertCircle size={12} /> Couldn't save your picks
+      </span>
+    );
+  }
+  return null;
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return "";
   const date = new Date(dateStr);
@@ -455,6 +639,42 @@ export default function ItineraryResults({
 }) {
   const [editingDay, setEditingDay] = useState(null);
   const [draftActivities, setDraftActivities] = useState([]);
+  const location = useLocation();
+
+  // Called unconditionally, above the early returns below: hooks cannot sit
+  // behind a conditional return.
+  const { isSelected, isFlightSelected, toggle, toggleFlight, saveState, selections } =
+    useItinerarySelections(itinerary, readOnly);
+
+  // A shared itinerary is somebody else's document, so it is shown whole and
+  // read-only rather than offering ticks that could never be saved.
+  const selectable = !readOnly && Boolean(itinerary?.id);
+
+  // Derived above the early returns below, because the count memo depends on
+  // them and a hook cannot run conditionally. Memoised so a new array identity
+  // on every render doesn't invalidate that memo.
+  const accommodations = useMemo(() => itinerary?.accommodations || [], [itinerary]);
+  const placesToVisit = useMemo(() => itinerary?.placesToVisit || [], [itinerary]);
+  const days = useMemo(() => itinerary?.days || [], [itinerary]);
+
+  const selectedCount = useMemo(
+    () => ({
+      hotels: accommodations.filter((_acc, i) => !selections.excluded.has(selectionKey("hotel", i)))
+        .length,
+      places: placesToVisit.filter((_place, i) => !selections.excluded.has(selectionKey("place", i)))
+        .length,
+      activities: days.reduce(
+        (total, day) =>
+          total +
+          (day.activities || []).filter(
+            (_activity, i) => !selections.excluded.has(selectionKey("activity", day.day, i)),
+          ).length,
+        0,
+      ),
+      flights: selections.flights.length,
+    }),
+    [selections, accommodations, placesToVisit, days],
+  );
 
   if (status === "loading") {
     return (
@@ -477,6 +697,12 @@ export default function ItineraryResults({
 
   if (status !== "ready" || !itinerary) return null;
 
+  /*
+   * Present only on itineraries generated after budget reconciliation landed —
+   * older saved trips have no verdict and simply show the breakdown alone.
+   */
+  const budgetVerdict = itinerary?.budgetVerdict ?? null;
+
   const budgetBreakdown = itinerary?.budgetBreakdown ?? {
     accommodation: 0,
     food: 0,
@@ -487,9 +713,6 @@ export default function ItineraryResults({
     currency: "INR",
   };
 
-  const accommodations = itinerary.accommodations || [];
-  const placesToVisit = itinerary.placesToVisit || [];
-  const days = itinerary.days || [];
   const tips = itinerary.tips || [];
 
   const startDayEdit = (day) => {
@@ -508,7 +731,6 @@ export default function ItineraryResults({
     setEditingDay(null);
   };
 
-  const location = useLocation();
   const sourceCity =
     location.state?.fromCity ||
     location.state?.origin ||
@@ -544,7 +766,13 @@ export default function ItineraryResults({
             places={placesToVisit}
           />
 
-          <FlightPredictions itinerary={itinerary} source={sourceCity} />
+          <FlightPredictions
+            itinerary={itinerary}
+            source={sourceCity}
+            selectable={selectable}
+            isFlightSelected={isFlightSelected}
+            onToggleFlight={toggleFlight}
+          />
 
           <PriceHistoryGraph itinerary={itinerary} sourceCity={sourceCity} />
 
@@ -594,6 +822,57 @@ export default function ItineraryResults({
                 <span className="text-xl font-bold tabular-nums">{formatCurrency(budgetBreakdown?.total)}</span>
               </div>
 
+              {/* ── Against the preferred budget ── */}
+              {budgetVerdict?.requestedBudget > 0 && (
+                <div className="mt-5 pt-4 border-t border-dashed border-slate-400">
+                  <div className="flex items-end text-sm">
+                    <span className="shrink-0 font-medium">PREFERRED BUDGET</span>
+                    <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
+                    <span className="shrink-0 font-bold tabular-nums">
+                      {formatCurrency(budgetVerdict.requestedBudget)}
+                    </span>
+                  </div>
+
+                  <div
+                    className={`flex items-end text-sm mt-2 ${
+                      budgetVerdict.withinBudget ? "text-emerald-700" : "text-amber-800"
+                    }`}
+                  >
+                    <span className="shrink-0 font-medium">
+                      {budgetVerdict.withinBudget ? "UNDER BY" : "OVER BY"}
+                    </span>
+                    <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
+                    <span className="shrink-0 font-bold tabular-nums">
+                      {formatCurrency(Math.abs(budgetVerdict.difference ?? 0))}
+                    </span>
+                  </div>
+
+                  {!budgetVerdict.withinBudget && budgetVerdict.suggestedBudget > 0 && (
+                    <div className="flex items-end text-sm mt-2 font-bold">
+                      <span className="shrink-0">SUGGESTED BUDGET</span>
+                      <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
+                      <span className="shrink-0 tabular-nums">
+                        {formatCurrency(budgetVerdict.suggestedBudget)}
+                      </span>
+                    </div>
+                  )}
+
+                  {budgetVerdict.notes?.length > 0 && (
+                    <ul
+                      className="mt-4 space-y-1.5 text-[11px] leading-snug text-slate-600"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      {budgetVerdict.notes.map((note) => (
+                        <li key={note} className="flex gap-1.5">
+                          <span aria-hidden="true">&middot;</span>
+                          <span>{note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               <div className="mt-12 flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                 <span>Detailed breakdown</span>
                 <span>{itinerary.totalDays} DAYS</span>
@@ -604,19 +883,138 @@ export default function ItineraryResults({
           </div>
 
 
-          <h2 className="text-xl font-bold mb-3">Accommodations</h2>
-          <div className="space-y-3 mb-6">
-            {accommodations.map((acc, i) => (
-              <div key={i} className="rounded-xl border border-slate-200 p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold">{acc.name}</p>
-                  <p className="text-sm text-slate-500">
-                    {acc.type} · {acc.location} · ₹{Number(acc.pricePerNight || 0).toLocaleString()}/night
-                  </p>
-                </div>
-                <span className="text-[#2563EB] font-semibold">{acc.rating}★</span>
+          {/* ── Where to Stay ── */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Where to Stay</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {accommodations.some((acc) => acc.source === "serpapi")
+                    ? "Live rates and ratings for your dates — tick the stay you want"
+                    : "Recommended stays for your trip"}
+                </p>
               </div>
-            ))}
+              {accommodations.some((acc) => acc.source === "serpapi") && (
+                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full">
+                  Live availability
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {accommodations.map((acc, i) => {
+                const key = selectionKey("hotel", i);
+                const checked = !selectable || isSelected(key);
+                const safeThumbnail = safeHttpUrl(acc.thumbnailUrl);
+                const safeBookingLink = safeHttpUrl(acc.bookingLink);
+                return (
+                  <div
+                    key={`${acc.name}-${i}`}
+                    className={`rounded-2xl overflow-hidden bg-white transition-all ${
+                      checked ? "border border-slate-200 shadow-sm" : "border border-slate-200 opacity-50"
+                    }`}
+                  >
+                    {safeThumbnail && (
+                      <div className="relative h-36 overflow-hidden bg-slate-100">
+                        <img
+                          src={safeThumbnail}
+                          alt={acc.name}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Google's image proxy links expire; a broken photo
+                            // should collapse the frame, not show a torn icon.
+                            e.currentTarget.parentElement.style.display = "none";
+                          }}
+                        />
+                        {acc.hotelClass ? (
+                          <span className="absolute bottom-2 left-2 rounded bg-black/55 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+                            {acc.hotelClass}-STAR
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
+
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 truncate">{acc.name}</p>
+                          <p className="text-xs text-slate-500 mt-0.5 capitalize">
+                            {acc.type} · {acc.location}
+                          </p>
+                        </div>
+                        {selectable && (
+                          <SelectBox
+                            checked={checked}
+                            onChange={() => toggle(key)}
+                            label={`Include ${acc.name} in my PDF`}
+                            className="mt-1"
+                          />
+                        )}
+                      </div>
+
+                      {acc.rating ? (
+                        <div className="mt-2 flex items-center gap-1.5 text-xs">
+                          <Star size={13} className="fill-amber-400 text-amber-400" />
+                          <span className="font-bold text-slate-800">{acc.rating}</span>
+                          {acc.reviewsCount ? (
+                            <span className="text-slate-500">
+                              ({acc.reviewsCount.toLocaleString("en-IN")} reviews)
+                            </span>
+                          ) : null}
+                          {acc.locationRating ? (
+                            <span className="text-slate-400">· Location {acc.locationRating}/5</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {acc.reviewHighlights?.length ? (
+                        <p className="mt-2 text-[11px] text-slate-500 italic">
+                          Guests liked: {acc.reviewHighlights.slice(0, 3).join(", ")}
+                        </p>
+                      ) : null}
+
+                      {acc.amenities?.length ? (
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          {acc.amenities.slice(0, 4).map((amenity) => (
+                            <span
+                              key={amenity}
+                              className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                            >
+                              {amenity}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-3 flex items-end justify-between border-t border-dashed border-slate-200 pt-3">
+                        <div>
+                          <p className="text-lg font-extrabold text-[#2563EB]">
+                            ₹{Number(acc.pricePerNight || 0).toLocaleString("en-IN")}
+                            <span className="text-[11px] font-medium text-slate-400"> /night</span>
+                          </p>
+                          {acc.totalPrice ? (
+                            <p className="text-[10px] text-slate-400">
+                              ₹{Number(acc.totalPrice).toLocaleString("en-IN")} total stay
+                            </p>
+                          ) : null}
+                        </div>
+                        {safeBookingLink && (
+                          <a
+                            href={safeBookingLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#2563EB] hover:underline"
+                          >
+                            View deal <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Places to Visit Section */}
@@ -630,23 +1028,46 @@ export default function ItineraryResults({
                   </p>
                 </div>
                 <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full">
-                  {placesToVisit.slice(0, 8).length} Attractions
+                  {placesToVisit.length} Attractions
                 </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {placesToVisit.slice(0, 8).map((place, i) => (
-                  <PlaceTicketCard
-                    key={`${place.name}-${i}`}
-                    place={place}
-                    destination={itinerary.destination}
-                  />
-                ))}
+                {placesToVisit.map((place, i) => {
+                  const key = selectionKey("place", i);
+                  const checked = !selectable || isSelected(key);
+                  return (
+                    <div key={`${place.name}-${i}`} className="relative">
+                      {selectable && (
+                        <label className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-white/95 px-2 py-1 shadow-md cursor-pointer">
+                          <SelectBox
+                            checked={checked}
+                            onChange={() => toggle(key)}
+                            label={`Include ${place.name} in my PDF`}
+                          />
+                        </label>
+                      )}
+                      <div className={checked ? "" : "opacity-45"}>
+                        <PlaceTicketCard place={place} destination={itinerary.destination} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          <h2 className="text-xl font-bold mb-3">Day-by-Day Schedule</h2>
+          <div className="flex items-end justify-between gap-3 flex-wrap mb-3">
+            <div>
+              <h2 className="text-xl font-bold">Day-by-Day Schedule</h2>
+              {selectable && (
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Untick anything you don’t want and it will be left out of your PDF
+                </p>
+              )}
+            </div>
+            <SelectionStatus saveState={saveState} />
+          </div>
           <div className="space-y-4">
             {days.map((day) => (
               <div key={day.day} className="rounded-xl border border-slate-200 overflow-hidden">
@@ -762,8 +1183,24 @@ export default function ItineraryResults({
                       </div>
                     </div>
                   ) : (
-                    (day.activities || []).map((activity, i) => (
-                      <div key={i} className="flex items-start gap-3 text-sm py-1 border-b border-slate-50 last:border-0">
+                    (day.activities || []).map((activity, i) => {
+                      const key = selectionKey("activity", day.day, i);
+                      const checked = !selectable || isSelected(key);
+                      return (
+                      <div
+                        key={i}
+                        className={`flex items-start gap-3 text-sm py-1 border-b border-slate-50 last:border-0 ${
+                          checked ? "" : "opacity-45"
+                        }`}
+                      >
+                        {selectable && (
+                          <SelectBox
+                            checked={checked}
+                            onChange={() => toggle(key)}
+                            label={`Include ${activity.title || "this activity"} on day ${day.day} in my PDF`}
+                            className="mt-1"
+                          />
+                        )}
                         <div className="flex items-center gap-2 w-28 flex-shrink-0">
                           {getActivityIcon(activity.type, activity.title)}
                           <span className="text-slate-500 font-medium whitespace-nowrap">{formatTime12Hour(activity.time)}</span>
@@ -779,7 +1216,8 @@ export default function ItineraryResults({
                           </span>
                         ) : null}
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -812,21 +1250,44 @@ export default function ItineraryResults({
         </div>
       </TicketContainer>
 
+      {selectable && (
+        <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-slate-600">
+            Your PDF and email will include{" "}
+            <span className="font-semibold text-slate-800">{selectedCount.hotels}</span> stay
+            {selectedCount.hotels === 1 ? "" : "s"},{" "}
+            <span className="font-semibold text-slate-800">{selectedCount.flights}</span> flight
+            {selectedCount.flights === 1 ? "" : "s"},{" "}
+            <span className="font-semibold text-slate-800">{selectedCount.places}</span> place
+            {selectedCount.places === 1 ? "" : "s"} and{" "}
+            <span className="font-semibold text-slate-800">{selectedCount.activities}</span> activit
+            {selectedCount.activities === 1 ? "y" : "ies"}.
+          </p>
+          <SelectionStatus saveState={saveState} />
+        </div>
+      )}
+
       <div className="mt-8 flex gap-3 flex-wrap">
         {onDownloadPdf && (
           <button
             type="button"
             onClick={onDownloadPdf}
-            className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2"
+            // The PDF is rendered from the saved document, so downloading while
+            // a selection save is still in flight would export the previous
+            // set of ticks.
+            disabled={saveState === "saving"}
+            className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <Download size={18} /> Download PDF
+            <Download size={18} />
+            {saveState === "saving" ? "Saving picks..." : "Download PDF"}
           </button>
         )}
         {onEmailPdf && (
           <button
             type="button"
             onClick={onEmailPdf}
-            className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2"
+            disabled={saveState === "saving"}
+            className="flex-1 min-w-[160px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Mail size={18} /> Email PDF
           </button>

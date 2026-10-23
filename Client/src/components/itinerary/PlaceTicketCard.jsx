@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { MapPin, Clock, Star, ExternalLink, Info, Sparkles } from "lucide-react";
 import { resolvePlaceImage } from "../../services/placeImageResolver";
+import { safeHttpUrl } from "../../lib/safeUrl";
 
 export default function PlaceTicketCard({ place, destination = "" }) {
   const [imageState, setImageState] = useState({
     loading: true,
-    url: place?.imageUrl || null,
+    url: safeHttpUrl(place?.imageUrl),
     source: place?.imageSource || null,
     author: place?.imageAuthor || null,
     isFallback: false,
@@ -16,11 +17,14 @@ export default function PlaceTicketCard({ place, destination = "" }) {
   useEffect(() => {
     let isMounted = true;
 
-    // If place already has an explicit image, use it directly
-    if (place?.imageUrl) {
+    // If place already has an explicit image, use it directly. The scheme is
+    // checked first: this value is stored in the itinerary document and is
+    // rendered on the public share page, so it is not trusted input.
+    const explicitImage = safeHttpUrl(place?.imageUrl);
+    if (explicitImage) {
       setImageState({
         loading: false,
-        url: place.imageUrl,
+        url: explicitImage,
         source: place.imageSource || "Partner",
         author: place.imageAuthor || null,
         isFallback: false,
@@ -69,10 +73,13 @@ export default function PlaceTicketCard({ place, destination = "" }) {
           </div>
         ) : (
           <img
+            // Re-checked at the sink so every path into imageState.url is
+            // covered, including the resolver's own result, not just the
+            // explicit place.imageUrl branch.
             src={
-              imgLoadError || !imageState.url
+              imgLoadError || !safeHttpUrl(imageState.url)
                 ? "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80"
-                : imageState.url
+                : safeHttpUrl(imageState.url)
             }
             alt={place.name}
             onError={() => setImgLoadError(true)}

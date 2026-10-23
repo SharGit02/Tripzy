@@ -22,6 +22,13 @@
       "when": 1788493288559,
       "tag": "0002_eager_venus",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792596180525,
+      "tag": "0003_sweet_ken_ellis",
+      "breakpoints": true
     }
   ]
 }

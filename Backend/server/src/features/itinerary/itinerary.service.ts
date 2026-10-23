@@ -12,6 +12,8 @@ import { itineraryRepository } from "./itinerary.repository.js";
 
 import { generateItineraryPdf } from "../../services/pdf/pdf.service.js";
 
+import { getHotelsOrEmpty, type Hotel } from "../hotels/hotels.service.js";
+
 import type {
     DirectItineraryInput,
     RegenerateInput,
@@ -469,10 +471,80 @@ function normalizeAccommodationType(
     return "hotel";
 }
 
+/**
+ * Maps a SerpApi listing onto the itinerary's accommodation shape.
+ *
+ * `type` is narrowed to the itinerary's own enum: Google Hotels only
+ * distinguishes "hotel" from "vacation rental", so a rental becomes a
+ * "homestay" — the closest member of our enum, and the honest label for what a
+ * Google vacation rental usually is.
+ */
+function hotelToAccommodation(hotel: Hotel): any {
+    return {
+        name: hotel.name,
+        type: hotel.type === "vacation_rental" ? "homestay" : "hotel",
+        pricePerNight: Math.max(1, Math.round(hotel.pricePerNight)),
+        currency: hotel.currency || "INR",
+        location: hotel.location,
+        amenities: hotel.amenities.length
+            ? hotel.amenities
+            : ["Wi-Fi", "Air conditioning", "Private bathroom"],
+        description:
+            hotel.description ||
+            `${hotel.hotelClass ? `${hotel.hotelClass}-star ` : ""}stay in ${hotel.location}.`,
+        source: "serpapi",
+        totalPrice: hotel.totalPrice,
+        ...(hotel.rating !== null ? { rating: hotel.rating } : {}),
+        ...(hotel.reviewsCount !== null ? { reviewsCount: hotel.reviewsCount } : {}),
+        ...(hotel.locationRating !== null ? { locationRating: hotel.locationRating } : {}),
+        ...(hotel.hotelClass !== null ? { hotelClass: hotel.hotelClass } : {}),
+        ...(hotel.imageUrl ? { imageUrl: hotel.imageUrl } : {}),
+        ...(hotel.thumbnailUrl ? { thumbnailUrl: hotel.thumbnailUrl } : {}),
+        ...(hotel.bookingLink ? { bookingLink: hotel.bookingLink } : {}),
+        ...(hotel.checkInTime ? { checkInTime: hotel.checkInTime } : {}),
+        ...(hotel.checkOutTime ? { checkOutTime: hotel.checkOutTime } : {}),
+        ...(hotel.reviewHighlights.length ? { reviewHighlights: hotel.reviewHighlights } : {}),
+    };
+}
+
 function buildAccommodations(
     aiOutput: any,
-    input: DirectItineraryInput
+    input: DirectItineraryInput,
+    hotels: Hotel[] = []
 ): any[] {
+    /*
+     * Real listings win outright when we have them: they carry live prices,
+     * ratings, photos and a booking link, none of which the model can supply.
+     *
+     * The one thing the model does contribute is the CHOICE — it was given this
+     * same shortlist and picked the stay that fits the trip, so its pick is
+     * floated to the top of the list as the default selection, and the rest
+     * follow as alternatives the traveler can tick instead.
+     */
+    if (hotels.length > 0) {
+        const aiPick = String(
+            aiOutput?.accommodation?.name ??
+            aiOutput?.accommodations?.[0]?.name ??
+            ""
+        )
+            .trim()
+            .toLowerCase();
+
+        const ordered = [...hotels];
+
+        if (aiPick) {
+            const pickIndex = ordered.findIndex(
+                (hotel) => hotel.name.trim().toLowerCase() === aiPick
+            );
+
+            if (pickIndex > 0) {
+                ordered.unshift(...ordered.splice(pickIndex, 1));
+            }
+        }
+
+        return ordered.slice(0, 8).map(hotelToAccommodation);
+    }
+
     const candidates: any[] = [];
 
     if (
@@ -555,6 +627,8 @@ function buildAccommodations(
                             input.destination
                         }.`
                     ),
+
+                source: "ai",
             })
         );
 
@@ -595,6 +669,7 @@ function buildAccommodations(
             ],
             description:
                 `Recommended ${input.accommodationType} accommodation based on your trip preferences.`,
+            source: "ai",
         },
     ];
 }
@@ -1306,6 +1381,169 @@ function buildDays(
    BUDGET
 ============================================================ */
 
+/*
+ * Cheapest realistic round trip PER PERSON, used only when the itinerary
+ * carries no intercity fare of its own.
+ *
+ * Mirrors INTERCITY_FLOOR in `Client/src/pages/Catalog/lib/minimumBudget.js`.
+ * Change one, change the other, or the minimum we warn about before generating
+ * stops matching the total we report after generating.
+ */
+const INTERCITY_FARE_FLOOR: Record<string, number> = {
+    flight: 6000,
+    train: 1600,
+    bus: 1200,
+    self_drive: 3500,
+};
+
+/*
+ * Transport entries that move you AROUND the destination rather than TO it.
+ * Everything else (flight, train, bus) is an intercity leg, and intercity legs
+ * in `transportOptions` are mutually exclusive alternatives — you take one of
+ * them, not all of them.
+ */
+const LOCAL_TRANSPORT_TYPES = new Set([
+    "cab",
+    "metro",
+    "rental",
+    "walking",
+]);
+
+function roundUpToSuggestion(
+    amount: number
+): number {
+    if (!Number.isFinite(amount) || amount <= 0) {
+        return 0;
+    }
+
+    const step =
+        amount >= 100_000
+            ? 10_000
+            : amount >= 20_000
+                ? 5_000
+                : 1_000;
+
+    return Math.ceil(amount / step) * step;
+}
+
+/*
+ * The stay we charge for is ONE stay: accommodations[0], which is the default
+ * selection (buildAccommodations floats the model's pick to the top). The rest
+ * of the list is alternatives the traveler can tick instead.
+ *
+ * A SerpApi listing carries `totalPrice` for the real date window, which beats
+ * multiplying a nightly rate. Either way it is per room, so rooms multiply it.
+ */
+function costAccommodation(
+    accommodations: any[],
+    nights: number,
+    rooms: number
+): { amount: number; quoted: boolean } {
+    const stay = accommodations[0];
+
+    if (!stay) {
+        return { amount: 0, quoted: false };
+    }
+
+    const quoted = stay.source === "serpapi";
+
+    const windowTotal = parseCostString(
+        stay.totalPrice
+    );
+
+    const amount =
+        windowTotal > 0
+            ? windowTotal * rooms
+            : parseCostString(
+                stay.pricePerNight
+            ) * nights * rooms;
+
+    return {
+        amount: Math.round(amount),
+        quoted,
+    };
+}
+
+/*
+ * Intercity fare for the whole party, plus whatever local transport the
+ * itinerary lists.
+ *
+ * The model is told to quote intercity fares PER PERSON (see
+ * ITINERARY_SYSTEM_PROMPT), so the fare multiplies by party size; local
+ * transport is quoted for the trip and does not.
+ */
+function costTransport(
+    transportOptions: any[],
+    input: DirectItineraryInput,
+    people: number
+): { amount: number; intercityEstimated: boolean } {
+    const preferred =
+        input.preferredTransport || "flight";
+
+    const intercity = transportOptions.filter(
+        (option: any) =>
+            !LOCAL_TRANSPORT_TYPES.has(
+                String(option?.type)
+            )
+    );
+
+    const leg =
+        intercity.find(
+            (option: any) =>
+                String(option?.type) === preferred
+        ) ?? intercity[0];
+
+    const quotedFare = parseCostString(
+        leg?.estimatedCost
+    );
+
+    /*
+     * estimatedCost is 0 when the model declined to price the leg, which is
+     * common. Falling back to a floor keeps flights inside the total instead
+     * of silently dropping them — the old behaviour, and the reason a trip's
+     * total never matched what the traveler actually paid.
+     */
+    const intercityEstimated = quotedFare <= 0;
+
+    const farePerPerson =
+        intercityEstimated
+            ? INTERCITY_FARE_FLOOR[preferred] ??
+              INTERCITY_FARE_FLOOR.flight
+            : quotedFare;
+
+    const local = transportOptions
+        .filter((option: any) =>
+            LOCAL_TRANSPORT_TYPES.has(
+                String(option?.type)
+            )
+        )
+        .reduce(
+            (total: number, option: any) =>
+                total +
+                parseCostString(
+                    option?.estimatedCost
+                ),
+            0
+        );
+
+    return {
+        amount: Math.round(
+            farePerPerson * people + local
+        ),
+        intercityEstimated,
+    };
+}
+
+/*
+ * Cost the trip from its own items. One path, always.
+ *
+ * This used to have three: trust the model's own budgetBreakdown, or split the
+ * traveler's requested budget by fixed 40/25/15/10 ratios, or compute from the
+ * data. The first two are why a total could equal the requested budget while
+ * none of the line items matched the trip — the breakdown was derived from the
+ * number instead of from the itinerary. The requested budget is now compared
+ * against the costed total (see buildBudgetVerdict), never used to produce it.
+ */
 function buildBudget(
     aiOutput: any,
     days: any[],
@@ -1313,258 +1551,217 @@ function buildBudget(
     transportOptions: any[],
     input: DirectItineraryInput
 ): any {
-    /*
-     * 1. Explicit AI budget.
-     */
+    const totalDays = calculateDays(
+        input.startDate,
+        input.endDate
+    );
 
-    const raw =
-        aiOutput?.budgetBreakdown;
+    const nights = Math.max(1, totalDays - 1);
 
-    if (
-        raw &&
-        typeof raw === "object" &&
-        !Array.isArray(raw)
-    ) {
-        const accommodation =
-            parseCostString(
-                raw.accommodation
-            );
+    const rooms = Math.max(
+        1,
+        Number(input.rooms) || 1
+    );
 
-        const food =
-            parseCostString(
-                raw.food
-            );
+    const people = Math.max(
+        1,
+        (Number(input.adults) || 0) +
+        (Number(input.children) || 0)
+    );
 
-        const transport =
-            parseCostString(
-                raw.transport
-            );
+    const stay = costAccommodation(
+        accommodations,
+        nights,
+        rooms
+    );
 
-        const activities =
-            parseCostString(
-                raw.activities
-            );
+    const travel = costTransport(
+        transportOptions,
+        input,
+        people
+    );
 
-        const miscellaneous =
-            parseCostString(
-                raw.miscellaneous
-            );
-
-        const total =
-            accommodation +
-            food +
-            transport +
-            activities +
-            miscellaneous;
-
-        if (total > 0) {
-            return {
-                accommodation,
-                food,
-                transport,
-                activities,
-                miscellaneous,
-                total,
-                currency:
-                    String(
-                        raw.currency ||
-                        "INR"
-                    ),
-            };
-        }
-    }
+    const allActivities = days.flatMap(
+        (day: any) => day.activities || []
+    );
 
     /*
-     * 2. User-provided budget.
-     *
-     * This is a target budget, not a guarantee.
-     * We use it only if AI did not provide
-     * category values.
+     * ponytail: activity and meal costs are taken as quoted for the party, not
+     * per head, which is how the model usually phrases them. If entry fees
+     * start reading per-person, multiply these by `people` too.
      */
-
-    if (
-        input.budget &&
-        input.budget > 0
-    ) {
-        const total =
-            Math.round(
-                input.budget
-            );
-
-        const accommodation =
-            Math.round(
-                total * 0.40
-            );
-
-        const food =
-            Math.round(
-                total * 0.25
-            );
-
-        const transport =
-            Math.round(
-                total * 0.15
-            );
-
-        const activities =
-            Math.round(
-                total * 0.10
-            );
-
-        const miscellaneous =
-            total -
-            accommodation -
-            food -
-            transport -
-            activities;
-
-        return {
-            accommodation,
-            food,
-            transport,
-            activities,
-            miscellaneous,
-            total,
-            currency: "INR",
-        };
-    }
-
-    /*
-     * 3. Calculate from actual data.
-     */
-
-    const totalDays =
-        calculateDays(
-            input.startDate,
-            input.endDate
-        );
-
-    const nights =
-        Math.max(
-            1,
-            totalDays - 1
-        );
-
-    const accommodation =
-        accommodations.reduce(
-            (
-                total: number,
-                accommodation: any
-            ) =>
+    const activities = allActivities
+        .filter(
+            (activity: any) =>
+                activity.type !== "meal"
+        )
+        .reduce(
+            (total: number, activity: any) =>
                 total +
-                parseCostString(
-                    accommodation.pricePerNight
-                ),
-            0
-        ) * nights;
-
-    const transport =
-        transportOptions.reduce(
-            (
-                total: number,
-                transport: any
-            ) =>
-                total +
-                parseCostString(
-                    transport.estimatedCost
-                ),
+                parseCostString(activity.cost),
             0
         );
 
-    const allActivities =
-        days.flatMap(
-            (day: any) =>
-                day.activities || []
+    const explicitMealCost = allActivities
+        .filter(
+            (activity: any) =>
+                activity.type === "meal"
+        )
+        .reduce(
+            (total: number, activity: any) =>
+                total +
+                parseCostString(activity.cost),
+            0
         );
-
-    const activities =
-        allActivities
-            .filter(
-                (activity: any) =>
-                    activity.type !==
-                    "meal"
-            )
-            .reduce(
-                (
-                    total: number,
-                    activity: any
-                ) =>
-                    total +
-                    parseCostString(
-                        activity.cost
-                    ),
-                0
-            );
-
-    /*
-     * Food is calculated ONLY from
-     * meal activities first.
-     */
-
-    const explicitMealCost =
-        allActivities
-            .filter(
-                (activity: any) =>
-                    activity.type ===
-                    "meal"
-            )
-            .reduce(
-                (
-                    total: number,
-                    activity: any
-                ) =>
-                    total +
-                    parseCostString(
-                        activity.cost
-                    ),
-                0
-            );
-
-    /*
-     * If AI didn't provide meal costs,
-     * estimate food from group size.
-     */
-
-    const people =
-        input.adults +
-        input.children;
 
     const food =
         explicitMealCost > 0
             ? explicitMealCost
             : Math.round(
-                  people *
-                      totalDays *
-                      1200
-              );
+                people * totalDays * 1200
+            );
 
-    const miscellaneous =
-        Math.round(
-            (
-                accommodation +
-                food +
-                transport +
-                activities
-            ) * 0.05
-        );
+    const miscellaneous = Math.round(
+        (
+            stay.amount +
+            food +
+            travel.amount +
+            activities
+        ) * 0.05
+    );
 
     const total =
-        accommodation +
+        stay.amount +
         food +
-        transport +
+        travel.amount +
         activities +
         miscellaneous;
 
     return {
-        accommodation,
+        accommodation: stay.amount,
         food,
-        transport,
+        transport: travel.amount,
         activities,
         miscellaneous,
         total,
-        currency: "INR",
+        currency: String(
+            aiOutput?.budgetBreakdown?.currency ||
+            "INR"
+        ),
+        /*
+         * Consumed by buildBudgetVerdict and then dropped — not part of
+         * BudgetBreakdownSchema.
+         */
+        _accommodationQuoted: stay.quoted,
+        _intercityEstimated: travel.intercityEstimated,
     };
 }
+
+/*
+ * Compare the costed trip against what the traveler asked to spend.
+ *
+ * Reports, never rewrites: a low budget produces a verdict explaining the gap
+ * and a figure that works, and the itinerary itself stays intact.
+ */
+function buildBudgetVerdict(
+    breakdown: any,
+    input: DirectItineraryInput
+): any {
+    const estimatedTotal = Math.round(
+        breakdown?.total || 0
+    );
+
+    const requested =
+        input.budget && input.budget > 0
+            ? Math.round(input.budget)
+            : null;
+
+    const intercityFareEstimated = Boolean(
+        breakdown?._intercityEstimated
+    );
+
+    const notes: string[] = [];
+
+    if (intercityFareEstimated) {
+        notes.push(
+            `Travel to and from ${input.destination} is a typical-fare estimate, not a quote. Check predicted fares for your dates.`
+        );
+    }
+
+    if (breakdown?._accommodationQuoted) {
+        notes.push(
+            "Stay cost uses live nightly rates for your dates."
+        );
+    }
+
+    if (requested === null) {
+        notes.push(
+            "No preferred budget was set, so this is simply what the trip is expected to cost."
+        );
+
+        return {
+            requestedBudget: null,
+            estimatedTotal,
+            difference: null,
+            withinBudget: true,
+            suggestedBudget: null,
+            intercityFareEstimated,
+            notes,
+            currency: String(
+                breakdown?.currency || "INR"
+            ),
+        };
+    }
+
+    const difference = estimatedTotal - requested;
+
+    const withinBudget = difference <= 0;
+
+    if (withinBudget) {
+        notes.push(
+            `Comes in ${formatInr(Math.abs(difference))} under your preferred budget.`
+        );
+    } else {
+        notes.push(
+            `This trip costs about ${formatInr(difference)} more than your preferred budget of ${formatInr(requested)}.`
+        );
+        notes.push(
+            "Shortening the trip, dropping to a cheaper stay or travelling by train or bus would bring it down."
+        );
+    }
+
+    return {
+        requestedBudget: requested,
+        estimatedTotal,
+        difference,
+        withinBudget,
+        suggestedBudget: withinBudget
+            ? null
+            : roundUpToSuggestion(estimatedTotal),
+        intercityFareEstimated,
+        notes,
+        currency: String(
+            breakdown?.currency || "INR"
+        ),
+    };
+}
+
+function formatInr(amount: number): string {
+    return `₹${Math.round(
+        amount
+    ).toLocaleString("en-IN")}`;
+}
+
+/*
+ * Exported for `itinerary.budget.test.ts` only. The budget math is the one part
+ * of the transform a traveler checks with a calculator, so it is worth a test
+ * that does not need a model call to run.
+ */
+export const __budgetInternals = {
+    buildBudget,
+    buildBudgetVerdict,
+    roundUpToSuggestion,
+};
 
 /* ============================================================
    MAIN TRANSFORMER
@@ -1572,7 +1769,8 @@ function buildBudget(
 
 function transformItineraryOutput(
     aiOutput: any,
-    input: DirectItineraryInput
+    input: DirectItineraryInput,
+    hotels: Hotel[] = []
 ): any {
     const totalDays =
         calculateDays(
@@ -1589,7 +1787,8 @@ function transformItineraryOutput(
     const accommodations =
         buildAccommodations(
             aiOutput,
-            input
+            input,
+            hotels
         );
 
     const transportOptions =
@@ -1605,7 +1804,7 @@ function transformItineraryOutput(
             input
         );
 
-    const budgetBreakdown =
+    const costed =
         buildBudget(
             aiOutput,
             days,
@@ -1613,6 +1812,23 @@ function transformItineraryOutput(
             transportOptions,
             input
         );
+
+    const budgetVerdict =
+        buildBudgetVerdict(
+            costed,
+            input
+        );
+
+    /*
+     * The two underscore-prefixed provenance flags exist only to get from
+     * buildBudget to buildBudgetVerdict; BudgetBreakdownSchema does not have
+     * them, so they are dropped before the breakdown is stored.
+     */
+    const {
+        _accommodationQuoted,
+        _intercityEstimated,
+        ...budgetBreakdown
+    } = costed;
 
     const tips =
         Array.isArray(
@@ -1652,6 +1868,8 @@ function transformItineraryOutput(
         overview,
 
         budgetBreakdown,
+
+        budgetVerdict,
 
         accommodations,
 
@@ -1718,13 +1936,57 @@ export const itineraryService = {
         );
 
         /*
+         * Real hotel inventory.
+         *
+         * Fetched BEFORE generation, not after, so the shortlist can go into
+         * the prompt and the model plans the trip around a stay that actually
+         * exists. Best-effort by design: SerpApi being down, unconfigured or
+         * out of quota degrades to the model's own suggestions rather than
+         * failing the whole itinerary.
+         *
+         * Check-out is the trip's end date, so the nightly rates priced here
+         * are the rates for exactly these dates.
+         */
+
+        const hotels =
+            await getHotelsOrEmpty({
+                destination:
+                    input.destination,
+                checkIn:
+                    input.startDate,
+                /*
+                 * Google Hotels prices a stay, not a day: an identical
+                 * check-in and check-out returns nothing. A single-day trip
+                 * still wants one night quoted, so the window is widened to
+                 * the next morning rather than spending a metered search on a
+                 * query that cannot return a rate.
+                 */
+                checkOut:
+                    input.endDate >
+                    input.startDate
+                        ? input.endDate
+                        : getDateForDay(
+                              input.startDate,
+                              1
+                          ),
+                adults:
+                    input.adults,
+            });
+
+        console.log(
+            "[ITINERARY] Hotels found:",
+            hotels.length
+        );
+
+        /*
          * AI generation
          */
 
         const aiOutput =
             await itineraryAI.generateDirectItinerary(
                 input,
-                userId
+                userId,
+                hotels
             );
 
         console.log(
@@ -1750,7 +2012,8 @@ export const itineraryService = {
         let itinerary =
             transformItineraryOutput(
                 aiOutput,
-                input
+                input,
+                hotels
             );
 
         console.log(
@@ -1897,6 +2160,25 @@ export const itineraryService = {
                 .activities +
             itinerary.budgetBreakdown
                 .miscellaneous;
+
+        /*
+         * The clamping above can move the total, so the verdict is rebuilt
+         * from the final figure. A stale verdict would report a difference
+         * against a total that is no longer on the page.
+         */
+        itinerary.budgetVerdict =
+            buildBudgetVerdict(
+                {
+                    ...itinerary.budgetBreakdown,
+                    _intercityEstimated:
+                        itinerary.budgetVerdict
+                            ?.intercityFareEstimated,
+                    _accommodationQuoted:
+                        itinerary.accommodations?.[0]
+                            ?.source === "serpapi",
+                },
+                input
+            );
 
         /*
          * Integrity validation.

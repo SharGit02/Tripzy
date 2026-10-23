@@ -26,8 +26,13 @@ app.use(
 );
 app.use(cors(corsOptions));
 app.use(cookieParser());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// Deliberately no express.urlencoded: cookies are SameSite=None in production,
+// and a form-encoded POST is a CORS "simple request" that skips preflight, so
+// parsing form bodies would hand every other site the ability to make
+// authenticated writes (CSRF). Requiring JSON forces a preflight, which the
+// origin allowlist then blocks. Every client of this API sends JSON.
+// Body size is capped so a single request cannot exhaust process memory.
+app.use(express.json({ limit: "100kb" }));
 
 app.use("/api", router);
 app.use(errorMiddleware);

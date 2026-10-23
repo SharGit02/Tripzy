@@ -144,6 +144,29 @@ export const flightFarePredictions = pgTable("flight_fare_predictions", {
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── hotel_cache ──────────────────────────────────────────────────────────
+// SerpApi's Google Hotels engine is metered per search, and the same
+// destination/date window gets requested repeatedly (itinerary generation, the
+// hotel picker, a regenerate). One row per normalized query caches the whole
+// normalized property list; `fetchedAt` drives the TTL at read time rather than
+// a sweeper job. Not FK'd to a user — the data is about a place, not a person,
+// so every user shares one cache entry.
+export const hotelCache = pgTable("hotel_cache", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // "goa|2026-11-10|2026-11-13|2" — destination, dates and occupancy, since
+    // SerpApi prices are per-window and per-occupancy.
+    cacheKey: varchar("cache_key", { length: 300 }).notNull(),
+    destination: varchar("destination", { length: 150 }).notNull(),
+    checkIn: date("check_in").notNull(),
+    checkOut: date("check_out").notNull(),
+    adults: integer("adults").notNull().default(2),
+    // Normalized Hotel[] (see hotels.service.ts), never the raw SerpApi body.
+    results: jsonb("results").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+    cacheKeyUnique: uniqueIndex("hotel_cache_key_unique").on(table.cacheKey),
+}));
+
 // ── itineraries ───────────────────────────────────────────────────────────
 // AI-generated personalized travel itineraries with full persistence.
 export const itineraries = pgTable("itineraries", {
@@ -252,3 +275,5 @@ export type ItineraryRow = typeof itineraries.$inferSelect;
 export type NewItineraryRow = typeof itineraries.$inferInsert;
 export type ItineraryQuestionRow = typeof itineraryQuestions.$inferSelect;
 export type NewItineraryQuestionRow = typeof itineraryQuestions.$inferInsert;
+export type HotelCacheRow = typeof hotelCache.$inferSelect;
+export type NewHotelCacheRow = typeof hotelCache.$inferInsert;
