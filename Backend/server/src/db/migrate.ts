@@ -20,6 +20,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
 import { env } from "../config/env.js";
+import { poolSsl, stripUrlSslParams } from "./ssl.js";
 
 // dist/db/migrate.js -> /app/server/drizzle (same hop from src/ under tsx).
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../drizzle");
@@ -29,11 +30,10 @@ const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url
 // migrate() call in `select pg_advisory_lock(...)` so two instances cannot
 // apply the same migration at once.
 const pool = new Pool({
-    connectionString: env.DATABASE_URL,
+    connectionString: stripUrlSslParams(env.DATABASE_URL),
     max: 1,
     connectionTimeoutMillis: 30_000,
-    // Matches client.ts — see the note there on why verification is explicit.
-    ssl: { rejectUnauthorized: true },
+    ssl: poolSsl,
 });
 
 try {

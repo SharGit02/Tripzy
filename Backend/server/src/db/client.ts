@@ -4,20 +4,16 @@ import { sql } from "drizzle-orm";
 
 import { env } from "../config/env.js";
 import * as schema from "./schema.js";
+import { poolSsl, stripUrlSslParams } from "./ssl.js";
 
 export const pool = new Pool({
-    connectionString: env.DATABASE_URL,
+    // Stripped: the raw URL's sslmode would override `ssl` below. See ssl.ts.
+    connectionString: stripUrlSslParams(env.DATABASE_URL),
     max: 5,
     min: 1,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 15_000,
-    // Verify the server certificate. Set explicitly rather than left to the
-    // URL's sslmode: DATABASE_URL carries `uselibpqcompat=true&sslmode=require`,
-    // which under libpq semantics means "encrypt but do not verify" — an
-    // encrypted connection to whoever answers, which a MITM on the path can
-    // satisfy. Neon's certs chain to Let's Encrypt, so this needs no custom CA;
-    // a provider with a private CA would pass `ca: env.DATABASE_CA_CERT` here.
-    ssl: { rejectUnauthorized: true },
+    ssl: poolSsl,
     // Neon serverless instances hibernate after inactivity.
     // Keeping the pool small and sending a keepalive every 30s prevents
     // stale connection errors after idle periods.
