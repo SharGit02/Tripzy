@@ -6,7 +6,11 @@ import { destinations } from "../../data/destinations";
 /* ─── tiny helper ─── */
 const wrap = (idx, len) => ((idx % len) + len) % len;
 
-export default function HeroSection({ onOpenAuth }) {
+// `paused` is set while the auth modal covers the page: the hero is then fully
+// hidden behind it, so every one of these loops — the rotation timer, the Ken
+// Burns zoom and the scroll cue — is work nobody can see, competing with the
+// modal's own typing/animation for frames.
+export default function HeroSection({ onOpenAuth, paused = false }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [cardIdx, setCardIdx] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -16,13 +20,14 @@ export default function HeroSection({ onOpenAuth }) {
 
   /* ─── auto-rotate destination every 6.5s ─── */
   useEffect(() => {
+    if (paused) return undefined;
     const timer = setInterval(() => {
       setDirection(1);
       setActiveIdx((i) => wrap(i + 1, destinations.length));
       setCardIdx(0);
     }, 6500);
     return () => clearInterval(timer);
-  }, []);
+  }, [paused]);
 
   /* ─── preload background images ─── */
   useEffect(() => {
@@ -71,8 +76,12 @@ export default function HeroSection({ onOpenAuth }) {
               src={d.bgImage}
               alt={d.name}
               initial={{ scale: 1 }}
-              animate={{ scale: 1.08 }}
-              transition={{ duration: 7, ease: "linear", repeat: Infinity, repeatType: "reverse" }}
+              animate={{ scale: paused ? 1.04 : 1.08 }}
+              transition={
+                paused
+                  ? { duration: 0 }
+                  : { duration: 7, ease: "linear", repeat: Infinity, repeatType: "reverse" }
+              }
               style={{
                 width: "100%",
                 height: "100%",
@@ -326,8 +335,8 @@ export default function HeroSection({ onOpenAuth }) {
       {/* ── Bottom Scroll Indicator ── */}
       <motion.div
         className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-20"
-        animate={{ y: [0, 6, 0] }}
-        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        animate={paused ? { y: 0 } : { y: [0, 6, 0] }}
+        transition={paused ? { duration: 0 } : { duration: 2, repeat: Infinity, ease: "easeInOut" }}
       >
         <div className="w-px h-8 bg-gradient-to-b from-transparent via-[#91E5F6] to-transparent" />
         <span className="text-[#91E5F6]/80 text-[10px] font-bold tracking-widest uppercase font-sans-dm">

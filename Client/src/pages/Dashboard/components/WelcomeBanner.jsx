@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
-// import heroImg from "../../../assets/images/hero.png";
-import heroImgMountains from "../../../assets/images/heroMountains.png";
+// import heroImg from "../../../assets/images/hero.webp";
+import heroImgMountains from "../../../assets/images/heroMountains.webp";
 
 export default function WelcomeBanner({ userName }) {
   const firstName = userName ? userName.split(" ")[0] : "Explorer";

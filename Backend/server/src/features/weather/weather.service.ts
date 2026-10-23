@@ -2,12 +2,17 @@ import { env } from "../../config/env.js";
 
 const OPEN_WEATHER_BASE = "https://api.openweathermap.org/data/2.5";
 const UPSTREAM_TIMEOUT_MS = 8000;
-const CACHE_TTL_MS = 10 * 60 * 1000;
+// 30 minutes, not 10: this cache also backs itinerary generation (see
+// itinerary.service.ts), and a handful of travelers generating trips to the
+// same popular destination within a window now share one OpenWeather call
+// instead of each paying for their own. Weather that is up to half an hour
+// stale is still indistinguishable to the user, on a dashboard widget or
+// baked into a generated itinerary alike.
+const CACHE_TTL_MS = 30 * 60 * 1000;
 
 // OpenWeather's free tier is rate limited per key, and a dashboard widget can
 // easily fan out to many requests for the same handful of cities. A short-lived
-// in-process cache keeps us well inside the quota; weather that is up to ten
-// minutes stale is indistinguishable to the user.
+// in-process cache keeps us well inside the quota.
 const cache = new Map<string, { expiresAt: number; payload: WeatherPayload }>();
 
 type HttpError = Error & { statusCode: number };

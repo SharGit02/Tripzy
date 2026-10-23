@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Star, Calendar, Check, Users, ChevronRight } from "lucide-react";
 
-import goaImg from "../../../assets/images/Goa.png";
-import kashmirImg from "../../../assets/images/Kashmir.png";
-import rajasthanImg from "../../../assets/images/Rajasthan.png";
+import goaImg from "../../../assets/images/Goa.jpg";
+import kashmirImg from "../../../assets/images/Kashmir.jpg";
+import rajasthanImg from "../../../assets/images/Rajasthan.jpg";
 import { TOP_PICKS } from "../lib/topPickItineraries";
 import { addDays, formatTripRange, nextSaturday } from "../lib/weekendDates";
 

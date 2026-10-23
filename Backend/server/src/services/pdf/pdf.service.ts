@@ -1,4 +1,6 @@
 import PDFDocument from "pdfkit";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import type {
     ItineraryOutput,
     ItineraryPlace,
@@ -6,6 +8,7 @@ import type {
     ItineraryTransport,
     ItineraryDayActivity,
 } from "../../features/itinerary/itinerary.schema.js";
+import { computeLiveBudget } from "../../features/itinerary/itinerary.liveBudget.js";
 
 type PDFDoc = PDFKit.PDFDocument;
 
@@ -35,6 +38,128 @@ const COLORS = {
 function safeNumber(value: unknown): number {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
+}
+
+const IMAGE_FETCH_TIMEOUT_MS = 5000;
+const IMAGE_FETCH_CONCURRENCY = 4;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // a hotel/place photo has no business being bigger
+
+/** True for a private, loopback, link-local, unspecified or carrier-NAT
+ * address — the ranges a server must never be tricked into fetching,
+ * cloud metadata endpoints (169.254.169.254) among them. */
+function isPrivateOrReservedIp(address: string): boolean {
+    if (isIP(address) === 4) {
+        const [a, b] = address.split(".").map(Number);
+        if (a === 10 || a === 127 || a === 0) return true; // 10/8, 127/8, 0/8
+        if (a === 169 && b === 254) return true; // 169.254/16 link-local incl. cloud metadata
+        if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12
+        if (a === 192 && b === 168) return true; // 192.168/16
+        if (a === 100 && b >= 64 && b <= 127) return true; // 100.64/10 carrier-grade NAT
+        return false;
+    }
+    const lower = address.toLowerCase();
+    if (lower === "::1" || lower === "::") return true; // loopback / unspecified
+    if (["fe8", "fe9", "fea", "feb"].some((p) => lower.startsWith(p))) return true; // fe80::/10 link-local
+    if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // fc00::/7 unique local
+    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped IPv6
+    if (mapped) return isPrivateOrReservedIp(mapped[1]);
+    return false;
+}
+
+/**
+ * Blocks SSRF via a hotel/place image URL: these can originate from
+ * AI-generated itinerary data, not only vetted SerpApi results, so the
+ * server cannot trust them to point anywhere safe. Requires https, then
+ * resolves the hostname and rejects it if ANY resolved address lands in a
+ * reserved range — covering both a literal IP typed into the URL and a
+ * hostname (e.g. one rebound via DNS) that resolves to one.
+ */
+async function isSafePublicImageUrl(url: string): Promise<boolean> {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return false;
+    }
+    if (parsed.protocol !== "https:") return false;
+
+    let addresses: { address: string }[];
+    try {
+        addresses = await lookup(parsed.hostname, { all: true });
+    } catch {
+        return false;
+    }
+    return addresses.length > 0 && addresses.every(({ address }) => !isPrivateOrReservedIp(address));
+}
+
+/**
+ * Fetches a single hotel/place photo for embedding via `doc.image()`, which
+ * needs raw bytes, not a URL. `isSafePublicImageUrl` blocks SSRF before any
+ * request is made; `redirect: "manual"` (so a 3xx response fails `.ok`
+ * rather than being followed) stops a redirect from reaching an unsafe
+ * target after the fact; the size cap bounds a malicious or oversized
+ * response. Every failure mode (missing/unsafe URL, 404, timeout, a
+ * redirect, a non-image response, an oversized one) resolves to `null`
+ * rather than throwing, so a broken photo never takes down the whole PDF —
+ * callers just render the card without a thumbnail, exactly as before this
+ * existed.
+ */
+async function fetchImageBuffer(url: string | undefined): Promise<Buffer | null> {
+    if (!url) return null;
+    if (!(await isSafePublicImageUrl(url))) return null;
+    try {
+        const response = await fetch(url, {
+            signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+            redirect: "manual",
+        });
+        if (!response.ok) return null;
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.startsWith("image/")) return null;
+        const declaredLength = Number(response.headers.get("content-length") || 0);
+        if (declaredLength > MAX_IMAGE_BYTES) return null;
+        const buffer = Buffer.from(await response.arrayBuffer());
+        if (buffer.length > MAX_IMAGE_BYTES) return null;
+        return buffer;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Runs `fn` over `items` in batches of `limit` concurrent calls. A hand-rolled
+ * loop rather than a dependency: itineraries cap at 8 hotel cards and 10 place
+ * cards (see the `.slice()` calls below), so this never has more than a
+ * couple of batches to run.
+ */
+async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    for (let i = 0; i < items.length; i += limit) {
+        const batch = items.slice(i, i + limit);
+        const batchResults = await Promise.all(batch.map((item, j) => fn(item, i + j)));
+        batchResults.forEach((result, j) => {
+            results[i + j] = result;
+        });
+    }
+    return results;
+}
+
+/**
+ * Draws a fetched photo into a square-ish box. `doc.image()` can throw on a
+ * buffer it can't parse (corrupt data, an unsupported format) even after the
+ * content-type check in `fetchImageBuffer` passed, so this is its own
+ * try/catch and simply leaves the box blank on failure.
+ */
+function drawThumbnail(doc: PDFDoc, buffer: Buffer | null, x: number, y: number, size: number): void {
+    if (!buffer) return;
+    try {
+        doc.image(buffer, x, y, { fit: [size, size], align: "center", valign: "center" });
+    } catch {
+        // Unsupported/corrupt image bytes: skip silently, card keeps its layout.
+    }
 }
 
 /**
@@ -361,10 +486,14 @@ function addBudgetCards(doc: PDFDoc, b: ItineraryOutput["budgetBreakdown"]): voi
         ["FOOD", b.food, COLORS.green],
         ["TRANSPORT", b.transport, COLORS.amber],
         ["ACTIVITIES", b.activities, COLORS.blue],
+        ["MISC", b.miscellaneous, COLORS.muted],
     ] as const;
 
+    // 6 cards need 5 gaps between them, not 4 - a card list missing
+    // Miscellaneous used to leave the 5 visible cards under-adding to the
+    // TOTAL card beside them by exactly that category's amount.
     const gap = 8;
-    const cardWidth = (PAGE.width - gap * 4) / 5;
+    const cardWidth = (PAGE.width - gap * 5) / 6;
     const y = doc.y;
 
     items.forEach(([label, amount, accent], index) => {
@@ -462,7 +591,14 @@ function addBudgetTable(doc: PDFDoc, b: ItineraryOutput["budgetBreakdown"]): voi
     doc.y = y + totalHeight + 14;
 }
 
-function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: number): void {
+const THUMB_SIZE = 72;
+
+function addAccommodationCard(
+    doc: PDFDoc,
+    acc: ItineraryAccommodation,
+    index: number,
+    thumbnail: Buffer | null = null,
+): void {
     ensureSpace(doc, 125);
 
     const x = PAGE.left;
@@ -484,14 +620,25 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
     if (amenities.length > 0) height += 18;
     if (ratingBits) height += 15;
     if ((acc.description || "").length > 260) height += 20;
+    if (thumbnail) height = Math.max(height, THUMB_SIZE + 38);
 
     roundedCard(doc, x, y, width, height, COLORS.white);
+
+    // A thumbnail, when fetched, reserves a square on the left and pushes
+    // every text line right by the same amount; no thumbnail keeps the
+    // original full-width layout byte-for-byte.
+    const textX = thumbnail ? x + 14 + THUMB_SIZE + 14 : x + 14;
+    const textWidth = thumbnail ? width - 28 - THUMB_SIZE - 14 : width - 28;
+
+    if (thumbnail) {
+        drawThumbnail(doc, thumbnail, x + 14, y + 13, THUMB_SIZE);
+    }
 
     doc.fillColor(COLORS.navy)
         .font("Helvetica-Bold")
         .fontSize(11)
-        .text(`${index + 1}. ${acc.name}`, x + 14, y + 13, {
-            width: width - 160,
+        .text(`${index + 1}. ${acc.name}`, textX, y + 13, {
+            width: textWidth - 132,
         });
 
     doc.fillColor(COLORS.blue)
@@ -505,8 +652,8 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
     doc.fillColor(COLORS.muted)
         .font("Helvetica")
         .fontSize(8)
-        .text(`${acc.type || "hotel"}  |  ${acc.location || "Location not specified"}`, x + 14, y + 34, {
-            width: width - 28,
+        .text(`${acc.type || "hotel"}  |  ${acc.location || "Location not specified"}`, textX, y + 34, {
+            width: textWidth,
         });
 
     let cursorY = y + 51;
@@ -515,7 +662,7 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
         doc.fillColor(COLORS.green)
             .font("Helvetica-Bold")
             .fontSize(8)
-            .text(ratingBits, x + 14, cursorY, { width: width - 28 });
+            .text(ratingBits, textX, cursorY, { width: textWidth });
         cursorY += 15;
     }
 
@@ -523,8 +670,8 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
         doc.fillColor(COLORS.text)
             .font("Helvetica")
             .fontSize(8)
-            .text(`Amenities: ${amenities.join("  |  ")}`, x + 14, cursorY, {
-                width: width - 28,
+            .text(`Amenities: ${amenities.join("  |  ")}`, textX, cursorY, {
+                width: textWidth,
             });
         cursorY += 19;
     }
@@ -532,8 +679,8 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
     doc.fillColor(COLORS.text)
         .font("Helvetica")
         .fontSize(8.5)
-        .text(truncate(acc.description || "", 430), x + 14, cursorY, {
-            width: width - 28,
+        .text(truncate(acc.description || "", 430), textX, cursorY, {
+            width: textWidth,
             lineGap: 1.5,
         });
 
@@ -553,7 +700,12 @@ function addAccommodationCard(doc: PDFDoc, acc: ItineraryAccommodation, index: n
     doc.y = y + height + 12;
 }
 
-function addPlaceCard(doc: PDFDoc, place: ItineraryPlace, index: number): void {
+function addPlaceCard(
+    doc: PDFDoc,
+    place: ItineraryPlace,
+    index: number,
+    thumbnail: Buffer | null = null,
+): void {
     ensureSpace(doc, 105);
 
     const x = PAGE.left;
@@ -563,11 +715,20 @@ function addPlaceCard(doc: PDFDoc, place: ItineraryPlace, index: number): void {
 
     roundedCard(doc, x, y, width, height, COLORS.white);
 
+    // Same left-thumbnail layout as the accommodation card: reserve a square
+    // and shift text right only when a photo was actually fetched.
+    const textX = thumbnail ? x + 14 + THUMB_SIZE + 14 : x + 14;
+    const textWidth = thumbnail ? width - 28 - THUMB_SIZE - 14 : width - 28;
+
+    if (thumbnail) {
+        drawThumbnail(doc, thumbnail, x + 14, y + (height - THUMB_SIZE) / 2, THUMB_SIZE);
+    }
+
     doc.fillColor(COLORS.navy)
         .font("Helvetica-Bold")
         .fontSize(10)
-        .text(`${index + 1}. ${place.name}`, x + 14, y + 12, {
-            width: width - 28,
+        .text(`${index + 1}. ${place.name}`, textX, y + 12, {
+            width: textWidth,
         });
 
     doc.fillColor(COLORS.blue)
@@ -575,9 +736,9 @@ function addPlaceCard(doc: PDFDoc, place: ItineraryPlace, index: number): void {
         .fontSize(7.5)
         .text(
             `${place.category || "Attraction"}  |  ${place.location || "Location not specified"}`,
-            x + 14,
+            textX,
             y + 30,
-            { width: width - 28 },
+            { width: textWidth },
         );
 
     const details = [
@@ -590,14 +751,14 @@ function addPlaceCard(doc: PDFDoc, place: ItineraryPlace, index: number): void {
         doc.fillColor(COLORS.muted)
             .font("Helvetica")
             .fontSize(7.5)
-            .text(details, x + 14, y + 45, { width: width - 28 });
+            .text(details, textX, y + 45, { width: textWidth });
     }
 
     doc.fillColor(COLORS.text)
         .font("Helvetica")
         .fontSize(8)
-        .text(truncate(place.description || "", 390), x + 14, y + 61, {
-            width: width - 28,
+        .text(truncate(place.description || "", 390), textX, y + 61, {
+            width: textWidth,
             lineGap: 1,
         });
 
@@ -719,6 +880,28 @@ function addDay(
 }
 
 export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<Buffer> {
+    // Selection filtering and image fetching both have to happen before the
+    // synchronous pdfkit drawing pass below, so they're hoisted out of the
+    // Promise executor that used to be this whole function body.
+    const isSelected = buildSelectionFilter(itinerary);
+
+    const accommodations = (Array.isArray(itinerary.accommodations) ? itinerary.accommodations : [])
+        .filter((_acc, index) => isSelected(`hotel:${index}`))
+        .slice(0, 8);
+    const places = (Array.isArray(itinerary.placesToVisit) ? itinerary.placesToVisit : [])
+        .filter((_place, index) => isSelected(`place:${index}`))
+        .slice(0, 10);
+
+    // One photo per card, fetched with bounded concurrency so a long
+    // itinerary never fires 18 simultaneous requests. A failed/missing fetch
+    // resolves to null and the card renders exactly as it did with no image.
+    const [accommodationThumbs, placeThumbs] = await Promise.all([
+        mapWithConcurrency(accommodations, IMAGE_FETCH_CONCURRENCY, (acc) =>
+            fetchImageBuffer(acc.thumbnailUrl || acc.imageUrl)),
+        mapWithConcurrency(places, IMAGE_FETCH_CONCURRENCY, (place) =>
+            fetchImageBuffer(place.imageUrl)),
+    ]);
+
     return new Promise((resolve, reject) => {
         try {
             const doc = new PDFDocument({
@@ -739,21 +922,27 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
             doc.on("end", () => resolve(Buffer.concat(chunks)));
             doc.on("error", reject);
 
-            const b = itinerary.budgetBreakdown;
+            /*
+             * Recomputed from the stored selections, NOT itinerary
+             * .budgetBreakdown: that figure is fixed at generation time, so a
+             * PDF exported after the traveler swapped the hotel or ticked a
+             * predicted fare used to disagree with the total on screen. Same
+             * rules as the results page - see itinerary.liveBudget.ts.
+             */
+            const b = computeLiveBudget(itinerary);
 
             // Everything the traveler ticked off in the UI is dropped here, so
             // the PDF is the chosen trip rather than the whole menu. Filtering
             // by original index keeps the keys stable regardless of how many
             // items each section later slices for layout.
-            const isSelected = buildSelectionFilter(itinerary);
             const flights = selectedFlights(itinerary);
             const trains = selectedTrains(itinerary);
             const buses = selectedBuses(itinerary);
 
-            const accommodations = (Array.isArray(itinerary.accommodations) ? itinerary.accommodations : [])
-                .filter((_acc, index) => isSelected(`hotel:${index}`));
-            const places = (Array.isArray(itinerary.placesToVisit) ? itinerary.placesToVisit : [])
-                .filter((_place, index) => isSelected(`place:${index}`));
+            // `accommodations`/`places` and their fetched thumbnails were
+            // already computed above, outside the Promise executor, since
+            // fetching needed to be awaited before this synchronous drawing
+            // pass starts.
             const transport = (Array.isArray(itinerary.transportOptions) ? itinerary.transportOptions : [])
                 .filter((_t, index) => isSelected(`transport:${index}`));
             const days = (Array.isArray(itinerary.days) ? itinerary.days : [])
@@ -875,8 +1064,8 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
                         : "Recommended accommodation options",
                 );
 
-                accommodations.slice(0, 8).forEach((acc, index) => {
-                    addAccommodationCard(doc, acc, index);
+                accommodations.forEach((acc, index) => {
+                    addAccommodationCard(doc, acc, index, accommodationThumbs[index] ?? null);
                 });
             }
 
@@ -888,8 +1077,8 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
 
                 addTitle(doc, "Places to Visit", "Highlights selected for your trip");
 
-                places.slice(0, 10).forEach((place, index) => {
-                    addPlaceCard(doc, place, index);
+                places.forEach((place, index) => {
+                    addPlaceCard(doc, place, index, placeThumbs[index] ?? null);
                 });
             }
 

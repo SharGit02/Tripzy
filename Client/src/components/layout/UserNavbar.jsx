@@ -16,7 +16,7 @@ import {
   Loader2,
   Check,
 } from "lucide-react";
-import logoImg from "../../assets/images/logo.png";
+import logoImg from "../../assets/images/logo.webp";
 import { fetchCurrentUser, logoutUser } from "../../lib/authApi";
 import { useLocationContext } from "../../context/LocationContext";
 import LocationDropdown from "./LocationDropdown";

@@ -38,10 +38,10 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#F4F9FD]">
       <Navbar onOpenAuth={setAuthModal} />
       <main>
-        <HeroSection onOpenAuth={setAuthModal} />
+        <HeroSection onOpenAuth={setAuthModal} paused={Boolean(authModal)} />
         <DestinationsSection />
         <FeaturesSection />
-        <HowItWorksSection />
+        <HowItWorksSection paused={Boolean(authModal)} />
         <FarePreviewSection />
         <FaqSection />
         <FinalCtaSection onOpenAuth={(tab) => setAuthModal(tab)} />

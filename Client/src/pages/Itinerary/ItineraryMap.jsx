@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { Plane, MapPin, ExternalLink, Navigation } from "lucide-react";
+import { Plane, MapPin, ExternalLink, Navigation, Map as MapIcon } from "lucide-react";
 import { CITY_COORDS } from "../../context/LocationContext";
-import { useInView } from "../../hooks/useInView";
 
 const EXTRA_CITY_COORDS = {
   Guwahati: [26.1445, 91.7362],
@@ -44,7 +43,12 @@ export default function ItineraryMap({ source, destination, origin, places = [] 
   const [sourceCoords, setSourceCoords] = useState(() => coordsForName(sourceName) || [28.6139, 77.209]);
   const [destCoords, setDestCoords] = useState(() => coordsForName(destName) || [15.4909, 73.8278]);
   const [activeFocus, setActiveFocus] = useState("both"); // "both" | "source" | "dest"
-  const [mapRef, mapInView] = useInView();
+  // The live Leaflet iframe is the single biggest cause of scroll jank on the
+  // itinerary page (a tile map is its own document and compositor layer for
+  // as long as it's mounted) and sits near the top of a long page, so an
+  // auto-load-when-scrolled-near trigger barely helped — it still loaded
+  // almost immediately. It's unloaded until explicitly asked for instead.
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   useEffect(() => {
     const sKnown = coordsForName(sourceName);
@@ -312,11 +316,10 @@ export default function ItineraryMap({ source, destination, origin, places = [] 
         </div>
       </div>
 
-      {/* Leaflet Iframe Map — only mounted once scrolled near view, since a
-          live tile map stays an active compositor layer for as long as it's
-          mounted and is the single biggest cause of scroll jank on this page. */}
-      <div ref={mapRef} className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-slate-100">
-        {mapInView ? (
+      {/* Leaflet Iframe Map — unloaded until the traveler asks for it (see
+          mapLoaded above). */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-slate-100">
+        {mapLoaded ? (
           <iframe
             key={`${sourceName}-${destName}-${activeFocus}-${sLat}-${dLat}`}
             title={`Route from ${sourceName} to ${destName}`}
@@ -326,9 +329,15 @@ export default function ItineraryMap({ source, destination, origin, places = [] 
             loading="lazy"
           />
         ) : (
-          <div className="w-full flex items-center justify-center text-sm text-slate-400" style={{ height: "380px" }}>
-            Loading map…
-          </div>
+          <button
+            type="button"
+            onClick={() => setMapLoaded(true)}
+            className="w-full flex flex-col items-center justify-center gap-2 text-slate-500 hover:text-[#2563EB] hover:bg-slate-50 transition-colors"
+            style={{ height: "380px" }}
+          >
+            <MapIcon className="w-8 h-8" />
+            <span className="text-sm font-semibold">Load interactive map</span>
+          </button>
         )}
       </div>
 

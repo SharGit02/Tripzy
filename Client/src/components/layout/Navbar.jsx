@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { LogIn, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import logoImg from "../../assets/images/logo.png";
+import logoImg from "../../assets/images/logo.webp";
 
 export default function Navbar({ onOpenAuth }) {
   const [scrolled, setScrolled] = useState(false);

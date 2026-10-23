@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, Lock, Eye, EyeOff, User, ChevronRight } from "lucide-react";
-import authBg from "../../assets/images/auth-bg.png";
-import logoImg from "../../assets/images/logo.png";
+import authBg from "../../assets/images/auth-bg.jpg";
+import logoImg from "../../assets/images/logo.webp";
 import mountainMark from "./tripzy_blue_mountain_transparent.svg";
 import { loginUser, signupUser } from "../../lib/authApi";
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { __budgetInternals } from "./itinerary.service.js";
+import { computeLiveBudget } from "./itinerary.liveBudget.js";
 
-const { buildBudget, buildBudgetVerdict, roundUpToSuggestion } = __budgetInternals;
+const { buildBudget, buildBudgetVerdict, roundUpToSuggestion, recalculateBudgetTotal } = __budgetInternals;
 
 /*
  * The budget is the one number a traveler checks with a calculator, and every
@@ -269,6 +270,55 @@ describe("buildBudgetVerdict", () => {
     });
 });
 
+describe("recalculateBudgetTotal", () => {
+    // regenerateItinerary used to skip this step entirely and trust the
+    // model's own `budgetBreakdown.total` verbatim - the exact "parts don't
+    // add up to the total" bug class this guards against, now shared by both
+    // the direct-generation and regeneration paths.
+    it("recomputes total as the sum of its own clamped categories, ignoring whatever total the model supplied", () => {
+        const itinerary: any = {
+            budgetBreakdown: {
+                accommodation: 12000,
+                food: 1200,
+                transport: 14000,
+                activities: 500,
+                miscellaneous: 1385,
+                total: 999999, // the model's own (wrong) total - must be ignored
+            },
+            accommodations: [{ source: "serpapi" }],
+        };
+
+        recalculateBudgetTotal(itinerary, input);
+
+        expect(itinerary.budgetBreakdown.total).toBe(12000 + 1200 + 14000 + 500 + 1385);
+    });
+
+    it("clamps a negative category to zero before summing", () => {
+        const itinerary: any = {
+            budgetBreakdown: { accommodation: -500, food: 1000, transport: 0, activities: 0, miscellaneous: 0 },
+            accommodations: [],
+        };
+
+        recalculateBudgetTotal(itinerary, input);
+
+        expect(itinerary.budgetBreakdown.accommodation).toBe(0);
+        expect(itinerary.budgetBreakdown.total).toBe(1000);
+    });
+
+    it("rebuilds the verdict against the corrected total, not a stale one", () => {
+        const itinerary: any = {
+            budgetBreakdown: { accommodation: 12000, food: 1200, transport: 14000, activities: 500, miscellaneous: 1385 },
+            budgetVerdict: { estimatedTotal: 1, withinBudget: true, intercityFareEstimated: false },
+            accommodations: [{ source: "serpapi" }],
+        };
+
+        recalculateBudgetTotal(itinerary, { ...input, budget: 20000 });
+
+        expect(itinerary.budgetVerdict.estimatedTotal).toBe(itinerary.budgetBreakdown.total);
+        expect(itinerary.budgetVerdict.withinBudget).toBe(false);
+    });
+});
+
 describe("roundUpToSuggestion", () => {
     it("rounds up to something a person would type", () => {
         expect(roundUpToSuggestion(29085)).toBe(30000);
@@ -280,5 +330,97 @@ describe("roundUpToSuggestion", () => {
         expect(roundUpToSuggestion(30000)).toBe(30000);
         expect(roundUpToSuggestion(0)).toBe(0);
         expect(roundUpToSuggestion(-5)).toBe(0);
+    });
+});
+
+/*
+ * The receipt on screen and the receipt in the PDF are now the same number,
+ * recomputed from the ticks rather than frozen at generation time. These cases
+ * are the ones that used to differ.
+ */
+describe("computeLiveBudget", () => {
+    const stored: any = {
+        totalDays: 5, // 4 nights
+        budgetBreakdown: {
+            accommodation: 40000,
+            food: 12000,
+            transport: 12000,
+            activities: 3000,
+            miscellaneous: 3350,
+            total: 70350,
+            currency: "INR",
+        },
+        budgetExplain: {
+            people: 2,
+            rooms: 1,
+            transport: { local: 1000 },
+            miscellaneous: { rate: 0.05 },
+        },
+        accommodations: [
+            { name: "Pricey Palace", pricePerNight: 10000 },
+            { name: "Modest Inn", pricePerNight: 4000 },
+        ],
+        days: [{ day: 1, activities: [{ cost: 2000 }, { cost: 1000 }] }],
+        selections: { excluded: [], flights: [], trains: [], buses: [] },
+    };
+
+    it("prices the first non-excluded stay, not the generation-time one", () => {
+        const swapped = computeLiveBudget({
+            ...stored,
+            selections: { ...stored.selections, excluded: ["hotel:0"] },
+        });
+        expect(swapped.accommodation).toBe(16000); // 4000 x 4 nights x 1 room
+    });
+
+    it("falls back to the stored figure when every stay is unticked", () => {
+        const none = computeLiveBudget({
+            ...stored,
+            selections: { ...stored.selections, excluded: ["hotel:0", "hotel:1"] },
+        });
+        expect(none.accommodation).toBe(40000);
+    });
+
+    it("multiplies a ticked fare by party size and adds local travel", () => {
+        const ticked = computeLiveBudget({
+            ...stored,
+            selections: { ...stored.selections, flights: [{ predictedFare: 2500 }] },
+        });
+        expect(ticked.transport).toBe(6000); // 2500 x 2 travellers + 1000 local
+    });
+
+    it("keeps a single fare when party size is unknown (pre-budgetExplain trips)", () => {
+        const legacy = computeLiveBudget({
+            ...stored,
+            budgetExplain: undefined,
+            selections: { ...stored.selections, trains: [{ predictedFare: 2500 }] },
+        });
+        expect(legacy.transport).toBe(2500);
+    });
+
+    it("drops unticked activities", () => {
+        const dropped = computeLiveBudget({
+            ...stored,
+            selections: { ...stored.selections, excluded: ["activity:1:0"] },
+        });
+        expect(dropped.activities).toBe(1000);
+    });
+
+    it("recomputes miscellaneous and the total off the live lines", () => {
+        const live = computeLiveBudget({
+            ...stored,
+            selections: { ...stored.selections, excluded: ["hotel:0"] },
+        });
+        // 16000 stay + 12000 food + 12000 transport + 3000 activities
+        expect(live.miscellaneous).toBe(2150);
+        expect(live.total).toBe(45150);
+        expect(live.total).toBe(
+            live.accommodation + live.food + live.transport + live.activities + live.miscellaneous,
+        );
+    });
+
+    it("matches the stored breakdown when nothing has been ticked or unticked", () => {
+        const untouched = computeLiveBudget(stored);
+        expect(untouched.accommodation).toBe(40000); // Pricey Palace, 10000 x 4
+        expect(untouched.transport).toBe(12000); // stored: no fare ticked
     });
 });

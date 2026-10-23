@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, Compass, Home } from "lucide-react";
-import logoImg from "../../assets/images/logo.png";
+import logoImg from "../../assets/images/logo.webp";
 
 export default function NotFoundPage() {
   return (

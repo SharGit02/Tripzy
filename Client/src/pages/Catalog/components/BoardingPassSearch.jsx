@@ -79,6 +79,9 @@ const EDGE_NOTCH_POSITIONS = [20, 40, 60, 80];
 /* ── Calendar Picker Dropdown ── */
 function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
   const today = new Date();
+  // Date-only floor: a trip cannot start in the past, and "today" must stay
+  // selectable all day rather than expiring at the moment the page loaded.
+  const minDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const [viewYear, setViewYear] = useState(
     startDate ? startDate.getFullYear() : today.getFullYear(),
   );
@@ -90,7 +93,12 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
     startDate && endDate ? "start" : startDate ? "end" : "start",
   );
 
+  // Nothing to show before the current month - every day in it is disabled.
+  const atMinMonth =
+    viewYear === minDay.getFullYear() && viewMonth === minDay.getMonth();
+
   const prevMonth = () => {
+    if (atMinMonth) return;
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -106,8 +114,11 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
   const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
   const firstDay = (y, m) => new Date(y, m, 1).getDay();
 
+  const isPast = (day) => new Date(viewYear, viewMonth, day) < minDay;
+
   const handleDayClick = (day) => {
     const d = new Date(viewYear, viewMonth, day);
+    if (isPast(day)) return;
     if (selecting === "start") {
       onSelect(d, null);
       setSelecting("end");
@@ -164,7 +175,13 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
         <button
           type="button"
           onClick={prevMonth}
-          className="p-1 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+          disabled={atMinMonth}
+          aria-label="Previous month"
+          className={`p-1 rounded-lg transition-colors ${
+            atMinMonth
+              ? "text-slate-300 cursor-not-allowed"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
         >
           <ChevronLeft size={16} />
         </button>
@@ -197,18 +214,21 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
           const start = isStart(day);
           const end = isEnd(day);
           const range = inRange(day);
+          const past = isPast(day);
           return (
             <button
               key={day}
               type="button"
+              disabled={past}
+              aria-disabled={past || undefined}
               onMouseEnter={() =>
-                setHovered(new Date(viewYear, viewMonth, day))
+                !past && setHovered(new Date(viewYear, viewMonth, day))
               }
               onMouseLeave={() => setHovered(null)}
               onClick={() => handleDayClick(day)}
               className={`
                 relative h-8 w-full text-[11px] font-semibold transition-all flex items-center justify-center
-                ${start || end ? "text-white z-10" : "text-gray-700 hover:text-[#1C3F94]"}
+                ${past ? "text-gray-300 cursor-not-allowed" : start || end ? "text-white z-10" : "text-gray-700 hover:text-[#1C3F94]"}
                 ${range ? "bg-blue-50" : ""}
               `}
             >
@@ -216,7 +236,7 @@ function CalendarPicker({ startDate, endDate, onSelect, onClose }) {
               <span
                 className={`
                   relative z-10 flex items-center justify-center h-7 w-7 mx-auto rounded-full transition-all text-[11px]
-                  ${start || end ? "text-white font-bold shadow-sm" : "hover:bg-slate-100"}
+                  ${past ? "" : start || end ? "text-white font-bold shadow-sm" : "hover:bg-slate-100"}
                   ${isToday(day) && !start && !end ? "ring-1 ring-blue-400 ring-offset-1" : ""}
                 `}
                 style={{
@@ -281,23 +301,38 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
   const calDropdownRef = useRef(null);
   const filterRef = useRef(null);
 
-  // Auto-scroll down so the calendar is comfortably in the user's POV when opened
+  /*
+   * Opening ANY field drops a panel below the ticket row, so every one of them
+   * gets the same nudge: scroll until the row sits in the upper third, which
+   * leaves ~two thirds of the viewport free for whatever just opened.
+   *
+   * Measured on the field cell, not the panel, so one rule covers panels of
+   * very different heights (a 330px calendar, the much taller filters drawer)
+   * and the from/where dropdowns that have no ref of their own. Never scrolls
+   * up: if the row is already high enough, nothing moves.
+   */
+  const openFieldRef = fromOpen
+    ? fromRef
+    : whereOpen
+      ? whereRef
+      : showCal
+        ? calRef
+        : showFilters
+          ? filterRef
+          : null;
+
   useEffect(() => {
-    if (showCal) {
-      const timer = setTimeout(() => {
-        if (calDropdownRef.current) {
-          const rect = calDropdownRef.current.getBoundingClientRect();
-          const vh = window.innerHeight || document.documentElement.clientHeight;
-          if (rect.bottom > vh - 20) {
-            window.scrollBy({ top: rect.bottom - vh + 60, behavior: "smooth" });
-          } else {
-            window.scrollBy({ top: 120, behavior: "smooth" });
-          }
-        }
-      }, 70);
-      return () => clearTimeout(timer);
-    }
-  }, [showCal]);
+    if (!openFieldRef?.current) return undefined;
+    const cell = openFieldRef.current;
+    // Waits for the panel to mount so the browser does not fight a layout
+    // shift mid-scroll.
+    const timer = setTimeout(() => {
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const delta = cell.getBoundingClientRect().bottom - vh / 3;
+      if (delta > 20) window.scrollBy({ top: delta, behavior: "smooth" });
+    }, 70);
+    return () => clearTimeout(timer);
+  }, [openFieldRef]);
 
   // Close calendar or filters on outside click
   useEffect(() => {
@@ -435,9 +470,11 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
         {/* ── Ticket Main Body ── */}
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(160px,1.15fr)_minmax(160px,1.2fr)_minmax(180px,1.35fr)_minmax(110px,0.85fr)_minmax(130px,1fr)]">
+          {/* Budget column widened from 110px: it was the only one narrow
+              enough to wrap its own label and hint, which broke the row. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(160px,1.15fr)_minmax(160px,1.2fr)_minmax(180px,1.35fr)_minmax(150px,1fr)_minmax(130px,1fr)]">
             {/* FROM */}
-            <div ref={fromRef} className="relative min-w-0 border-b md:border-r border-slate-100">
+            <div ref={fromRef} className="relative min-w-0 border-b xl:border-b-0 md:border-r border-slate-100">
               <div className="w-full h-full flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors">
                 <MapPin
                   size={18}
@@ -445,15 +482,19 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                   style={{ color: PERSIAN_BLUE }}
                 />
                 <div className="min-w-0 flex-1 select-none">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     From
                   </p>
+                  {/* Value styled exactly like the other four fields - plain
+                      bold text on the row's baseline, not a boxed pill, which
+                      sat a few px lower than its neighbours and made the row
+                      look misaligned. */}
                   <button
                     type="button"
                     onClick={() => setFromOpen((prev) => !prev)}
-                    className="flex flex-wrap items-center gap-1.5 max-w-full rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200/80 hover:border-blue-200 transition-all px-2.5 py-1.5"
+                    className="flex items-center gap-1.5 max-w-full text-left mt-0.5 group/from"
                   >
-                    <span className="text-xs font-bold text-slate-800">
+                    <span className="text-sm font-bold text-gray-800 truncate group-hover/from:text-[#1C3F94] transition-colors">
                       {currentCity}
                     </span>
                     <span className="text-[8px] font-extrabold uppercase text-[#1C3F94] bg-blue-100/80 px-1.5 py-0.5 rounded-md tracking-wider shrink-0">
@@ -461,7 +502,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                     </span>
                     <ChevronDown size={12} className={`text-slate-400 shrink-0 transition-transform duration-200 ${fromOpen ? "rotate-180 text-[#2563EB]" : ""}`} />
                   </button>
-                  <p className="text-[11px] text-gray-400 mt-1">
+                  <p className="text-[11px] text-gray-400 mt-0.5">
                     Change departure
                   </p>
                 </div>
@@ -470,7 +511,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
             </div>
 
             {/* WHERE TO */}
-            <div ref={whereRef} className="relative min-w-0 border-b xl:border-r border-slate-100">
+            <div ref={whereRef} className="relative min-w-0 border-b xl:border-b-0 xl:border-r border-slate-100">
               <div className="w-full h-full flex items-start gap-3 px-5 xl:px-6 py-5 hover:bg-blue-50/40 transition-colors">
                 <MapPin
                   size={18}
@@ -530,7 +571,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
             </div>
 
             {/* DURATION */}
-            <div ref={calRef} className="relative min-w-0 border-b md:border-r border-slate-100">
+            <div ref={calRef} className="relative min-w-0 border-b xl:border-b-0 md:border-r border-slate-100">
               <button
                 type="button"
                 onClick={() => {
@@ -617,7 +658,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
 
             {/* PREFERRED BUDGET */}
             <div
-              className={`min-w-0 border-b xl:border-r border-slate-100 flex items-start gap-3 px-5 xl:px-6 py-5 transition-colors ${
+              className={`min-w-0 border-b xl:border-b-0 xl:border-r border-slate-100 flex items-start gap-3 px-5 xl:px-6 py-5 transition-colors ${
                 budgetBelowMinimum ? "bg-amber-50/70" : "hover:bg-blue-50/40"
               }`}
             >
@@ -627,8 +668,11 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                 style={{ color: budgetBelowMinimum ? "#b45309" : PERSIAN_BLUE }}
               />
               <div className="min-w-0 flex-1">
+                {/* One word on purpose: "Preferred budget" wrapped to two
+                    lines in this column and pushed the value and hint below
+                    every other field's baseline. */}
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                  Preferred budget
+                  Budget
                 </p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <input
@@ -698,7 +742,7 @@ export default function BoardingPassSearch({ onSearch, disabled = false }) {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Filters
                   </p>
-                  <p className="text-[13px] leading-tight font-bold text-gray-800 group-hover:text-[#1C3F94] transition-colors mt-0.5">
+                  <p className="text-sm font-bold text-gray-800 group-hover:text-[#1C3F94] transition-colors mt-0.5">
                     More filters
                   </p>
                   <p className="text-[11px] text-gray-400 mt-0.5">

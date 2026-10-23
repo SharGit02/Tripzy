@@ -14,6 +14,9 @@ import { generateItineraryPdf } from "../../services/pdf/pdf.service.js";
 
 import { getHotelsOrEmpty, type Hotel } from "../hotels/hotels.service.js";
 import { getWeatherForCity } from "../weather/weather.service.js";
+import { predictFareWindow } from "../flightFare/flightFare.service.js";
+import { predictRailFareWindow } from "../railFare/railFare.service.js";
+import { predictBusFareWindow } from "../busFare/busFare.service.js";
 
 import type {
     DirectItineraryInput,
@@ -785,10 +788,16 @@ function buildTransportOptions(
                         transport?.costEstimate
                     ),
 
-                currency: String(
-                    transport?.currency ||
-                    "INR"
-                ),
+                /*
+                 * Every cost figure in this file is summed and displayed as
+                 * INR (see ITINERARY_SYSTEM_PROMPT, parseCostString and
+                 * costTransport) regardless of what this field says, so
+                 * trusting an AI-supplied currency string here would let a
+                 * single leg's label drift from the number actually added to
+                 * the INR total. Every other branch in this function already
+                 * hardcodes "INR"; this one now matches.
+                 */
+                currency: "INR",
             });
         }
     }
@@ -1439,11 +1448,17 @@ function costAccommodation(
     accommodations: any[],
     nights: number,
     rooms: number
-): { amount: number; quoted: boolean } {
+): {
+    amount: number;
+    quoted: boolean;
+    hotelName: string | null;
+    nightlyRate: number;
+    windowTotal: number;
+} {
     const stay = accommodations[0];
 
     if (!stay) {
-        return { amount: 0, quoted: false };
+        return { amount: 0, quoted: false, hotelName: null, nightlyRate: 0, windowTotal: 0 };
     }
 
     const quoted = stay.source === "serpapi";
@@ -1452,16 +1467,21 @@ function costAccommodation(
         stay.totalPrice
     );
 
+    const nightlyRate = parseCostString(
+        stay.pricePerNight
+    );
+
     const amount =
         windowTotal > 0
             ? windowTotal * rooms
-            : parseCostString(
-                stay.pricePerNight
-            ) * nights * rooms;
+            : nightlyRate * nights * rooms;
 
     return {
         amount: Math.round(amount),
         quoted,
+        hotelName: stay.name ? String(stay.name) : null,
+        nightlyRate: Math.round(nightlyRate),
+        windowTotal: Math.round(windowTotal),
     };
 }
 
@@ -1477,7 +1497,13 @@ function costTransport(
     transportOptions: any[],
     input: DirectItineraryInput,
     people: number
-): { amount: number; intercityEstimated: boolean } {
+): {
+    amount: number;
+    intercityEstimated: boolean;
+    mode: string;
+    farePerPerson: number;
+    local: number;
+} {
     const preferred =
         input.preferredTransport || "flight";
 
@@ -1532,6 +1558,9 @@ function costTransport(
             farePerPerson * people + local
         ),
         intercityEstimated,
+        mode: String(leg?.type || preferred),
+        farePerPerson: Math.round(farePerPerson),
+        local: Math.round(local),
     };
 }
 
@@ -1603,11 +1632,18 @@ function buildBudget(
             0
         );
 
-    const explicitMealCost = allActivities
-        .filter(
-            (activity: any) =>
-                activity.type === "meal"
-        )
+    const pricedActivityCount = allActivities.filter(
+        (activity: any) =>
+            activity.type !== "meal" &&
+            parseCostString(activity.cost) > 0
+    ).length;
+
+    const meals = allActivities.filter(
+        (activity: any) =>
+            activity.type === "meal"
+    );
+
+    const explicitMealCost = meals
         .reduce(
             (total: number, activity: any) =>
                 total +
@@ -1655,6 +1691,51 @@ function buildBudget(
          */
         _accommodationQuoted: stay.quoted,
         _intercityEstimated: travel.intercityEstimated,
+
+        /*
+         * Lifted out to `budgetExplain` by transformItineraryOutput: every
+         * number the lines above were derived from, so the receipt can show
+         * the arithmetic instead of a bare total. Display only — nothing reads
+         * it back.
+         */
+        _explain: {
+            days: totalDays,
+            nights,
+            people,
+            adults: Math.max(0, Number(input.adults) || 0),
+            children: Math.max(0, Number(input.children) || 0),
+            rooms,
+            accommodation: {
+                hotel: stay.hotelName,
+                nightlyRate: stay.nightlyRate,
+                windowTotal: stay.windowTotal,
+                nights,
+                rooms,
+                quoted: stay.quoted,
+            },
+            food: {
+                // "meals" = the day plan priced its own meals; "estimate" =
+                // nobody did, so the per-person-per-day fallback applies.
+                source: explicitMealCost > 0 ? "meals" : "estimate",
+                mealCount: meals.length,
+                perPersonPerDay: explicitMealCost > 0 ? null : 1200,
+                people,
+                days: totalDays,
+            },
+            transport: {
+                mode: travel.mode,
+                farePerPerson: travel.farePerPerson,
+                people,
+                local: travel.local,
+                estimated: travel.intercityEstimated,
+            },
+            activities: {
+                count: pricedActivityCount,
+            },
+            miscellaneous: {
+                rate: 0.05,
+            },
+        },
     };
 }
 
@@ -1753,6 +1834,46 @@ function formatInr(amount: number): string {
     ).toLocaleString("en-IN")}`;
 }
 
+/**
+ * Clamps each budget category to >= 0, recomputes `total` as the literal sum
+ * of those clamped categories, and rebuilds `budgetVerdict` against that
+ * corrected total. Mutates `itinerary` in place.
+ *
+ * Never trust a model's own `budgetBreakdown.total` verbatim: it used to
+ * equal the requested budget even when no line item matched the trip. Both
+ * `generateDirectItinerary` and `regenerateItinerary` call this before
+ * saving, so neither path can persist a total that doesn't match the sum of
+ * its own line items (the regenerate path used to skip this step entirely).
+ */
+function recalculateBudgetTotal(itinerary: any, input: DirectItineraryInput): void {
+    const budget = itinerary.budgetBreakdown || {};
+
+    itinerary.budgetBreakdown = {
+        ...budget,
+        accommodation: Math.max(0, Number(budget.accommodation || 0)),
+        food: Math.max(0, Number(budget.food || 0)),
+        transport: Math.max(0, Number(budget.transport || 0)),
+        activities: Math.max(0, Number(budget.activities || 0)),
+        miscellaneous: Math.max(0, Number(budget.miscellaneous || 0)),
+    };
+
+    itinerary.budgetBreakdown.total =
+        itinerary.budgetBreakdown.accommodation +
+        itinerary.budgetBreakdown.food +
+        itinerary.budgetBreakdown.transport +
+        itinerary.budgetBreakdown.activities +
+        itinerary.budgetBreakdown.miscellaneous;
+
+    itinerary.budgetVerdict = buildBudgetVerdict(
+        {
+            ...itinerary.budgetBreakdown,
+            _intercityEstimated: itinerary.budgetVerdict?.intercityFareEstimated,
+            _accommodationQuoted: itinerary.accommodations?.[0]?.source === "serpapi",
+        },
+        input,
+    );
+}
+
 /*
  * Exported for `itinerary.budget.test.ts` only. The budget math is the one part
  * of the transform a traveler checks with a calculator, so it is worth a test
@@ -1762,6 +1883,7 @@ export const __budgetInternals = {
     buildBudget,
     buildBudgetVerdict,
     roundUpToSuggestion,
+    recalculateBudgetTotal,
 };
 
 /* ============================================================
@@ -1828,6 +1950,7 @@ function transformItineraryOutput(
     const {
         _accommodationQuoted,
         _intercityEstimated,
+        _explain: budgetExplain,
         ...budgetBreakdown
     } = costed;
 
@@ -1872,6 +1995,8 @@ function transformItineraryOutput(
 
         budgetVerdict,
 
+        budgetExplain,
+
         accommodations,
 
         placesToVisit,
@@ -1911,7 +2036,9 @@ export const itineraryService = {
         // Best-effort progress callback for the SSE stream in
         // itinerary.controller.ts. Never thrown from, never awaited — a slow or
         // broken listener must not slow down generation.
-        onProgress?: (stage: "hotels" | "weather" | "ai" | "finalizing") => void
+        onProgress?: (
+            stage: "hotels" | "flights" | "trains" | "buses" | "weather" | "ai" | "budget" | "saving",
+        ) => void
     ): Promise<{
         itinerary: any;
         itineraryId: string;
@@ -1919,8 +2046,6 @@ export const itineraryService = {
         console.log(
             "[ITINERARY] ===== GENERATION START ====="
         );
-
-        onProgress?.("hotels");
 
         const requestedDays =
             calculateDays(
@@ -1943,59 +2068,88 @@ export const itineraryService = {
         );
 
         /*
-         * Real hotel inventory.
+         * Real hotel inventory, destination weather, and a same-date fare
+         * check against each intercity mode — all run CONCURRENTLY, so these
+         * checks cost as long as the slowest of them, not their sum, and each
+         * fires its own progress event the moment it settles. This is what
+         * turns the loading page's single opaque "crafting your plan" wait
+         * into granular, honest steps: every one of these is a real network
+         * call, not a timer.
          *
-         * Fetched BEFORE generation, not after, so the shortlist can go into
-         * the prompt and the model plans the trip around a stay that actually
-         * exists. Best-effort by design: SerpApi being down, unconfigured or
-         * out of quota degrades to the model's own suggestions rather than
-         * failing the whole itinerary.
+         * Hotels and weather feed the prompt/document as before (fetched
+         * BEFORE generation so the model plans around a stay that actually
+         * exists). The fare checks call the exact same prediction services
+         * the itinerary page itself uses for its outbound leg.
          *
-         * Check-out is the trip's end date, so the nightly rates priced here
-         * are the rates for exactly these dates.
+         * ponytail: the fetched fares aren't fed into the prompt or stored
+         * anywhere right now - only used to drive progress. Wire them into
+         * transportOptions if "ground the model's transport cost guess in a
+         * real same-date fare" is ever wanted; that's a bigger change than a
+         * progress step, left alone here so it can't touch the budget math.
+         *
+         * All five are best-effort: a down service, a route with no fare
+         * data, or no known origin all degrade to "checked, nothing learned"
+         * rather than slowing down or failing generation.
          */
 
-        const hotels =
-            await getHotelsOrEmpty({
-                destination:
-                    input.destination,
-                checkIn:
-                    input.startDate,
-                /*
-                 * Google Hotels prices a stay, not a day: an identical
-                 * check-in and check-out returns nothing. A single-day trip
-                 * still wants one night quoted, so the window is widened to
-                 * the next morning rather than spending a metered search on a
-                 * query that cannot return a rate.
-                 */
-                checkOut:
-                    input.endDate >
-                    input.startDate
-                        ? input.endDate
-                        : getDateForDay(
-                              input.startDate,
-                              1
-                          ),
-                adults:
-                    input.adults,
-            });
+        const origin = (input.origin || input.fromCity || "").trim();
+        const canCheckFares =
+            origin.length >= 2 && origin.toLowerCase() !== input.destination.trim().toLowerCase();
+
+        const hotelsPromise = getHotelsOrEmpty({
+            destination: input.destination,
+            checkIn: input.startDate,
+            /*
+             * Google Hotels prices a stay, not a day: an identical check-in
+             * and check-out returns nothing. A single-day trip still wants
+             * one night quoted, so the window is widened to the next morning
+             * rather than spending a metered search on a query that cannot
+             * return a rate.
+             */
+            checkOut:
+                input.endDate > input.startDate
+                    ? input.endDate
+                    : getDateForDay(input.startDate, 1),
+            adults: input.adults,
+        }).finally(() => onProgress?.("hotels"));
+
+        const weatherPromise = getWeatherForCity(input.destination)
+            .catch((error) => {
+                console.warn("[ITINERARY] Weather lookup failed:", (error as Error).message);
+                return undefined;
+            })
+            .finally(() => onProgress?.("weather"));
+
+        const fareCheck = (
+            stage: "flights" | "trains" | "buses",
+            run: () => Promise<unknown>,
+        ): Promise<unknown> =>
+            (canCheckFares ? run().catch(() => null) : Promise.resolve(null)).finally(() =>
+                onProgress?.(stage),
+            );
+
+        const flightsPromise = fareCheck("flights", () =>
+            predictFareWindow({ origin, destination: input.destination, startDate: input.startDate, windowDays: 1 }),
+        );
+        const trainsPromise = fareCheck("trains", () =>
+            predictRailFareWindow({ origin, destination: input.destination, startDate: input.startDate, windowDays: 1 }),
+        );
+        const busesPromise = fareCheck("buses", () =>
+            predictBusFareWindow({ origin, destination: input.destination, startDate: input.startDate, windowDays: 1 }),
+        );
+
+        const [hotels, weather] = await Promise.all([
+            hotelsPromise,
+            weatherPromise,
+            flightsPromise,
+            trainsPromise,
+            busesPromise,
+        ]);
 
         console.log(
             "[ITINERARY] Hotels found:",
             hotels.length
         );
-
-        /*
-         * Destination weather. Best-effort, same reasoning as hotels: a down or
-         * unconfigured OpenWeather (OPEN_WEATHER_API unset) degrades to no
-         * weather card rather than failing the whole itinerary.
-         */
-        onProgress?.("weather");
-
-        const weather = await getWeatherForCity(input.destination).catch((error) => {
-            console.warn("[ITINERARY] Weather lookup failed:", (error as Error).message);
-            return undefined;
-        });
 
         /*
          * AI generation
@@ -2116,96 +2270,14 @@ export const itineraryService = {
          * Recalculate budget total.
          */
 
-        const budget =
-            itinerary.budgetBreakdown;
-
-        itinerary.budgetBreakdown =
-            {
-                ...budget,
-
-                accommodation:
-                    Math.max(
-                        0,
-                        Number(
-                            budget.accommodation ||
-                            0
-                        )
-                    ),
-
-                food:
-                    Math.max(
-                        0,
-                        Number(
-                            budget.food ||
-                            0
-                        )
-                    ),
-
-                transport:
-                    Math.max(
-                        0,
-                        Number(
-                            budget.transport ||
-                            0
-                        )
-                    ),
-
-                activities:
-                    Math.max(
-                        0,
-                        Number(
-                            budget.activities ||
-                            0
-                        )
-                    ),
-
-                miscellaneous:
-                    Math.max(
-                        0,
-                        Number(
-                            budget.miscellaneous ||
-                            0
-                        )
-                    ),
-            };
-
-        itinerary.budgetBreakdown.total =
-            itinerary.budgetBreakdown
-                .accommodation +
-            itinerary.budgetBreakdown
-                .food +
-            itinerary.budgetBreakdown
-                .transport +
-            itinerary.budgetBreakdown
-                .activities +
-            itinerary.budgetBreakdown
-                .miscellaneous;
-
-        /*
-         * The clamping above can move the total, so the verdict is rebuilt
-         * from the final figure. A stale verdict would report a difference
-         * against a total that is no longer on the page.
-         */
-        itinerary.budgetVerdict =
-            buildBudgetVerdict(
-                {
-                    ...itinerary.budgetBreakdown,
-                    _intercityEstimated:
-                        itinerary.budgetVerdict
-                            ?.intercityFareEstimated,
-                    _accommodationQuoted:
-                        itinerary.accommodations?.[0]
-                            ?.source === "serpapi",
-                },
-                input
-            );
+        recalculateBudgetTotal(itinerary, input);
+        onProgress?.("budget");
 
         itinerary.weather = weather;
 
         /*
          * Integrity validation.
          */
-        onProgress?.("finalizing");
 
         const integrity =
             validateItineraryIntegrity(
@@ -2293,6 +2365,7 @@ export const itineraryService = {
         /*
          * SAVE TO DATABASE
          */
+        onProgress?.("saving");
 
         const savedItinerary =
             await itineraryRepository.create(
@@ -2454,11 +2527,21 @@ export const itineraryService = {
             );
 
         /*
-         * Regeneration returns canonical
-         * format, unlike direct generation.
-         *
-         * But we still validate it.
+         * Regeneration returns canonical format, unlike direct generation,
+         * but its own budgetBreakdown.total is still the model's word for
+         * it - recompute the same way generateDirectItinerary does, before
+         * validating, so a regenerated trip can't save a total that doesn't
+         * match the sum of its own line items.
          */
+        const verdictInput: DirectItineraryInput =
+            (existing.userAnswers as DirectItineraryInput | null) ??
+            ({
+                destination: regenerated.destination || previousItinerary.destination,
+                startDate: regenerated.startDate || previousItinerary.startDate,
+                endDate: regenerated.endDate || previousItinerary.endDate,
+            } as DirectItineraryInput);
+
+        recalculateBudgetTotal(regenerated, verdictInput);
 
         const validated =
             ItineraryOutputSchema.parse(

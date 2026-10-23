@@ -43,15 +43,17 @@ const steps = [
   },
 ];
 
-export default function HowItWorksSection() {
+// `paused` while the auth modal is open - see HeroSection.
+export default function HowItWorksSection({ paused = false }) {
   const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
+    if (paused) return undefined;
     const timer = setInterval(() => {
       setActiveStep((prev) => (prev + 1) % steps.length);
     }, 3200);
     return () => clearInterval(timer);
-  }, []);
+  }, [paused]);
 
   const progress = ((activeStep + 1) / steps.length) * 100;
 

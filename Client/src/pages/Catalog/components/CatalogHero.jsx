@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { TriangleAlert } from "lucide-react";
-import airplaneImg from "../../../assets/images/Airplane.png";
+import airplaneImg from "../../../assets/images/Airplane.webp";
 import BoardingPassSearch from "./BoardingPassSearch";
 
 export default function CatalogHero({ onSearch, submitting = false, searchError = "" }) {

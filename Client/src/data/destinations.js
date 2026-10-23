@@ -3,7 +3,7 @@
 // ===============================
 // KASHMIR IMAGES
 // ===============================
-import kashmir from "../assets/images/Kashmir.png";
+import kashmir from "../assets/images/Kashmir.jpg";
 import srinagar from "../assets/images/Srinagar.jpeg";
 import gulmarg from "../assets/images/Gulmarg.jpeg";
 import pahalgam from "../assets/images/Pahalgam.jpeg";
@@ -12,7 +12,7 @@ import sonamarg from "../assets/images/Sonamarg.jpeg";
 // ===============================
 // RAJASTHAN IMAGES
 // ===============================
-import rajasthan from "../assets/images/Rajasthan.png";
+import rajasthan from "../assets/images/Rajasthan.jpg";
 import jaisalmer from "../assets/images/Jaisalmer.jpeg";
 import jaipur from "../assets/images/Jaipur.jpeg";
 import udaipur from "../assets/images/Udaipur.jpeg";
@@ -21,7 +21,7 @@ import jodhpur from "../assets/images/Jodhpur.jpeg";
 // ===============================
 // KERALA IMAGES
 // ===============================
-import kerala from "../assets/images/Kerela.png";
+import kerala from "../assets/images/Kerela.jpg";
 import munnar from "../assets/images/Munnar.jpeg";
 import alleppey from "../assets/images/Alleppey.jpeg";
 import kochi from "../assets/images/Kochi.jpeg";
@@ -30,7 +30,7 @@ import varkala from "../assets/images/Varkala.jpeg";
 // ===============================
 // GOA IMAGES
 // ===============================
-import goa from "../assets/images/Goa.png";
+import goa from "../assets/images/Goa.jpg";
 import panjim from "../assets/images/Panjim.jpeg";
 import calangute from "../assets/images/Calangute.jpeg";
 import anjuna from "../assets/images/Anjuna.jpeg";
@@ -39,7 +39,7 @@ import palolem from "../assets/images/Palolem.jpeg";
 // ===============================
 // MEGHALAYA IMAGES
 // ===============================
-import meghalaya from "../assets/images/Meghalaya.png";
+import meghalaya from "../assets/images/Meghalaya.jpg";
 import shillong from "../assets/images/Shillong.jpeg";
 import cherrapunji from "../assets/images/Cherrapunji.jpeg";
 import dawki from "../assets/images/Dawki.jpeg";
@@ -48,7 +48,7 @@ import mawlynnong from "../assets/images/Mawlynnong.jpeg";
 // ===============================
 // HIMACHAL IMAGES
 // ===============================
-import himachal from "../assets/images/Himachal.png";
+import himachal from "../assets/images/Himachal.jpg";
 import manali from "../assets/images/Manali.jpeg";
 import shimla from "../assets/images/Shimla.jpeg";
 import dharamshala from "../assets/images/Dharamshala.jpeg";
@@ -57,7 +57,7 @@ import spiti from "../assets/images/Spiti.jpeg";
 // ===============================
 // VARANASI IMAGES
 // ===============================
-import varanasi from "../assets/images/Varanasi.png";
+import varanasi from "../assets/images/Varanasi.jpg";
 import dashashwamedh from "../assets/images/Dashashwamedh.jpeg";
 import sarnath from "../assets/images/Sarnath.jpeg";
 import manikarnika from "../assets/images/Manikarnika.jpeg";
@@ -66,7 +66,7 @@ import kashiVishwanath from "../assets/images/KashiVishwanath.jpeg";
 // ===============================
 // LADAKH IMAGES
 // ===============================
-import ladakh from "../assets/images/Ladakh.png";
+import ladakh from "../assets/images/Ladakh.jpg";
 import leh from "../assets/images/Leh.jpeg";
 import pangong from "../assets/images/Pangong.jpeg";
 import nubra from "../assets/images/Nubra.jpeg";

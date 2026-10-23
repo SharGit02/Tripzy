@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Luggage, MapPin, Map, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import adventureImg from "../../../assets/images/Ladakh.png";
+import adventureImg from "../../../assets/images/Ladakh.jpg";
 
 export default function JourneyStats({ trips = 0, places = 0, itineraries = 0 }) {
     const stats = [

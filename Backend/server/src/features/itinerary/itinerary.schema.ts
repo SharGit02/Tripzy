@@ -275,6 +275,15 @@ export const ItineraryOutputSchema = z.object({
     }).optional(),
     selections: ItinerarySelectionsSchema.optional(),
     budgetVerdict: BudgetVerdictSchema.optional(),
+    /**
+     * The inputs each budget line was computed from, so the receipt can show
+     * "IndiGo-class fare 2,500 x 2 travellers" instead of an unexplained
+     * number. Display-only provenance produced by `buildBudget` - never read
+     * back into the math, and absent on itineraries saved before it existed.
+     * Loosely typed on purpose: it is our own output, it is additive, and a
+     * new driver should not fail validation on an old saved trip.
+     */
+    budgetExplain: z.record(z.string(), z.any()).optional(),
     // Fetched best-effort during generation (features/weather/weather.service.ts
     // `getWeatherForCity`). Mirrors its WeatherPayload shape; absent when the
     // lookup failed or OPEN_WEATHER_API is unconfigured — never blocks generation.

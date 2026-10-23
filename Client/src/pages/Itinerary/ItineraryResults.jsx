@@ -24,7 +24,18 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
-  Sparkles
+  Sparkles,
+  Sun,
+  Cloud,
+  Cloudy,
+  CloudSun,
+  CloudMoon,
+  CloudDrizzle,
+  CloudSunRain,
+  CloudMoonRain,
+  CloudLightning,
+  CloudSnow,
+  CloudFog
 } from "lucide-react";
 import ItineraryMap from "./ItineraryMap";
 import {
@@ -34,10 +45,8 @@ import {
   saveItinerarySelections,
 } from "../../lib/authApi";
 import { safeHttpUrl } from "../../lib/safeUrl";
-import { getBookingPlatforms } from "./bookingLinks";
 import PlaceTicketCard from "../../components/itinerary/PlaceTicketCard";
 import PriceHistoryGraph from "../../components/itinerary/PriceHistoryGraph";
-import { useInView } from "../../hooks/useInView";
 import TicketContainer from "../../components/itinerary/TicketContainer";
 
 function formatTime12Hour(timeStr) {
@@ -890,22 +899,55 @@ function BusPredictions({ itinerary, source, date, direction = "outbound", isBus
   );
 }
 
+// OpenWeather's own icon PNGs are tiny (50px) low-detail rasters that turn
+// muddy the moment they're scaled up in a card — crisp lucide SVGs read much
+// cleaner at any size and match the rest of the app's icon language. Mapped
+// from OpenWeather's two-digit condition group (see
+// https://openweathermap.org/weather-conditions), with day/night variants
+// swapped from the "d"/"n" suffix where lucide has one.
+const WEATHER_ICON_BY_GROUP = {
+  "01": { day: Sun, night: Moon, color: "text-amber-400" },
+  "02": { day: CloudSun, night: CloudMoon, color: "text-amber-400" },
+  "03": { day: Cloud, night: Cloud, color: "text-slate-400" },
+  "04": { day: Cloudy, night: Cloudy, color: "text-slate-500" },
+  "09": { day: CloudDrizzle, night: CloudDrizzle, color: "text-blue-400" },
+  "10": { day: CloudSunRain, night: CloudMoonRain, color: "text-blue-500" },
+  "11": { day: CloudLightning, night: CloudLightning, color: "text-indigo-500" },
+  "13": { day: CloudSnow, night: CloudSnow, color: "text-sky-300" },
+  "50": { day: CloudFog, night: CloudFog, color: "text-slate-300" },
+};
+
+function weatherIcon(owmCode) {
+  const entry = WEATHER_ICON_BY_GROUP[String(owmCode || "").slice(0, 2)];
+  if (!entry) return { Icon: Cloud, color: "text-slate-400" };
+  return { Icon: String(owmCode).endsWith("n") ? entry.night : entry.day, color: entry.color };
+}
+
 /**
  * Destination weather, fetched server-side during generation (best-effort —
  * see weather.service.ts `getWeatherForCity`) and stored on the itinerary.
  * Renders nothing when the lookup failed or OpenWeather wasn't configured.
  */
-function WeatherCard({ weather, destination }) {
+function WeatherCard({ weather, destination, startDate, endDate }) {
   if (!weather?.current) return null;
   const { current, forecast } = weather;
 
+  // OpenWeather's free tier only forecasts ~5 days ahead, fetched once at
+  // generation time - so the raw list is "the next 5 days from whenever the
+  // trip was generated," not the trip's actual dates. Showing that unfiltered
+  // (as this used to) is actively misleading once the trip is more than a
+  // few days out. Keep only the days that actually fall in the trip window.
+  const tripForecast = (forecast || []).filter(
+    (day) => (!startDate || day.date >= startDate) && (!endDate || day.date <= endDate),
+  );
+
+  const currentIcon = weatherIcon(current.icon);
+
   return (
     <div className="mb-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 to-white p-4 flex flex-wrap items-center gap-4">
-      <img
-        src={`https://openweathermap.org/img/wn/${current.icon}@2x.png`}
-        alt={current.condition}
-        className="w-14 h-14 -my-2"
-      />
+      <div className="w-14 h-14 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center shrink-0">
+        <currentIcon.Icon className={`w-8 h-8 ${currentIcon.color}`} strokeWidth={1.75} />
+      </div>
       <div>
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
           Weather in {destination}
@@ -918,23 +960,28 @@ function WeatherCard({ weather, destination }) {
           High {current.highC}° · Low {current.lowC}° · Feels like {current.feelsLikeC}°
         </p>
       </div>
-      {forecast?.length > 0 && (
+      {tripForecast.length > 0 ? (
         <div className="flex gap-3 ml-auto">
-          {forecast.slice(0, 4).map((day) => (
-            <div key={day.date} className="text-center">
-              <p className="text-[10px] font-semibold text-slate-500">{day.day}</p>
-              <img
-                src={`https://openweathermap.org/img/wn/${day.icon}.png`}
-                alt={day.condition}
-                className="w-8 h-8 mx-auto"
-              />
-              <p className="text-[10px] text-slate-500">
-                {day.highC}°/{day.lowC}°
-              </p>
-            </div>
-          ))}
+          {tripForecast.map((day) => {
+            const dayIcon = weatherIcon(day.icon);
+            return (
+              <div key={day.date} className="text-center">
+                <p className="text-[10px] font-semibold text-slate-500">
+                  {day.day} {new Date(day.date).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                </p>
+                <dayIcon.Icon className={`w-6 h-6 mx-auto my-1 ${dayIcon.color}`} strokeWidth={1.75} />
+                <p className="text-[10px] text-slate-500">
+                  {day.highC}°/{day.lowC}°
+                </p>
+              </div>
+            );
+          })}
         </div>
-      )}
+      ) : forecast?.length > 0 ? (
+        <p className="text-xs text-slate-400 italic ml-auto max-w-[180px]">
+          Day-by-day forecast opens up closer to your travel dates.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1336,14 +1383,25 @@ function useItinerarySelections(itinerary, readOnly) {
 }
 
 /**
- * Defers mounting a heavy child (a live chart, a tile map) until it has
- * scrolled near view, so it isn't live and repainting on every scroll frame
- * before the traveler ever sees it. `minHeight` holds the placeholder's
- * height to avoid a layout jump when the real content mounts in.
+ * Keeps a heavy child (a live chart) unloaded until the traveler explicitly
+ * asks for it. An auto-load-on-scroll-near trigger was tried here first, but
+ * this section sits near the top of a long page, so it barely helped — it
+ * still loaded almost immediately. `minHeight` sizes the placeholder/button
+ * so there's no layout jump when the real content mounts in.
  */
-function LazyMount({ children, minHeight = 0 }) {
-  const [ref, inView] = useInView();
-  return <div ref={ref}>{inView ? children : <div style={{ minHeight }} />}</div>;
+function LazyMount({ children, minHeight = 0, label = "Load" }) {
+  const [loaded, setLoaded] = useState(false);
+  if (loaded) return children;
+  return (
+    <button
+      type="button"
+      onClick={() => setLoaded(true)}
+      className="w-full flex items-center justify-center text-sm font-semibold text-slate-500 hover:text-[#2563EB] hover:bg-slate-50 rounded-2xl border border-slate-200 transition-colors"
+      style={{ minHeight }}
+    >
+      {label}
+    </button>
+  );
 }
 
 /**
@@ -1472,9 +1530,196 @@ export default function ItineraryResults({
       ),
       flights: selections.flights.length,
       trains: selections.trains.length,
+      buses: selections.buses.length,
     }),
     [selections, accommodations, placesToVisit, days],
   );
+
+  // "N stays, M flights, ... and K activities" — built from selectedCount so
+  // flight/train/bus are only mentioned when one's actually chosen (at most
+  // one of each per direction), while hotels/places/activities always show.
+  const selectionSummary = useMemo(() => {
+    const pluralize = (n, singular, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
+    const parts = [
+      pluralize(selectedCount.hotels, "stay"),
+      selectedCount.flights > 0 && pluralize(selectedCount.flights, "flight"),
+      selectedCount.trains > 0 && pluralize(selectedCount.trains, "train"),
+      selectedCount.buses > 0 && pluralize(selectedCount.buses, "bus", "buses"),
+      pluralize(selectedCount.places, "place"),
+      pluralize(selectedCount.activities, "activity", "activities"),
+    ].filter(Boolean);
+    if (parts.length <= 1) return parts.join("");
+    return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+  }, [selectedCount]);
+
+  // Total Estimate, recomputed live from what's actually ticked rather than
+  // the AI's static one-shot figure. Accommodation and transport come from
+  // the selected hotel(s)/flight/train/bus; activities from each selected
+  // activity's own `cost`. Food and miscellaneous have no per-item checkbox
+  // to tie them to, so they stay the AI's static estimate. A category with
+  // nothing selected yet falls back to its static estimate too, so the
+  // receipt doesn't show ₹0 before the traveler has picked anything (hotels
+  // in particular default to unselected — see ADR 0005 update).
+  const liveBudget = useMemo(() => {
+    const staticBudget = itinerary?.budgetBreakdown || {};
+    const currency = staticBudget.currency || "INR";
+    const nights = Math.max(1, (itinerary?.totalDays || 1) - 1);
+    const tripDays = itinerary?.totalDays || 1;
+
+    /*
+     * What the server actually costed each line from (`budgetExplain`, written
+     * by buildBudget). Absent on itineraries saved before it existed, so every
+     * read is optional and every note falls back to saying nothing rather than
+     * guessing at arithmetic that may not be what produced the number.
+     */
+    const explain = itinerary?.budgetExplain || null;
+    const people = Number(explain?.people) || 0;
+    const rooms = Number(explain?.rooms) || 1;
+    const notes = {};
+
+    // Hotels are a checklist, not mutually exclusive (a traveler can tick
+    // several to compare in their export) — but the trip itself is still one
+    // stay, matching how the server prices accommodation (costAccommodation
+    // only ever prices accommodations[0]). Summing every ticked hotel would
+    // inflate the estimate as if booking all of them, so only the first
+    // selected one counts toward the total.
+    const selectedHotels = accommodations.filter(
+      (_acc, i) => !selections.excluded.has(selectionKey("hotel", i)),
+    );
+    const firstHotel = selectedHotels[0];
+    const hotelWindowTotal = Number(firstHotel?.totalPrice) || 0;
+    const hotelNightly = Number(firstHotel?.pricePerNight) || 0;
+    const accommodation = firstHotel
+      ? (hotelWindowTotal || hotelNightly * nights) * rooms
+      : Number(staticBudget.accommodation) || 0;
+
+    if (firstHotel) {
+      const roomPart = rooms > 1 ? ` × ${rooms} rooms` : "";
+      notes.accommodation = hotelWindowTotal
+        ? `${firstHotel.name} · ${formatCurrency(hotelWindowTotal)} for the stay${roomPart}`
+        : `${firstHotel.name} · ${formatCurrency(hotelNightly)}/night × ${nights} night${nights > 1 ? "s" : ""}${roomPart}`;
+      if (selectedHotels.length > 1) {
+        notes.accommodation += ` (first of ${selectedHotels.length} ticked)`;
+      }
+    } else if (explain?.accommodation?.hotel) {
+      notes.accommodation = `${explain.accommodation.hotel} · ${formatCurrency(
+        explain.accommodation.nightlyRate,
+      )}/night × ${explain.accommodation.nights} night${explain.accommodation.nights > 1 ? "s" : ""}${
+        explain.accommodation.rooms > 1 ? ` × ${explain.accommodation.rooms} rooms` : ""
+      } — no stay ticked yet`;
+    }
+
+    /*
+     * Predicted fares are PER PERSON (the ML services price one seat), which
+     * is also how the server costs the intercity leg — so a ticked fare is
+     * multiplied by party size here too. Without `people` (older itineraries
+     * carry no budgetExplain) it stays a single fare rather than inventing a
+     * multiplier.
+     */
+    const chosenFares = [...selections.flights, ...selections.trains, ...selections.buses];
+    const seats = people || 1;
+    const localTransport = Number(explain?.transport?.local) || 0;
+    const transportSum = chosenFares.reduce(
+      (sum, item) => sum + (Number(item.predictedFare) || 0) * seats,
+      0,
+    );
+    const transport =
+      chosenFares.length > 0 ? transportSum + localTransport : Number(staticBudget.transport) || 0;
+
+    if (chosenFares.length > 0) {
+      notes.transport = chosenFares
+        .map((item) => {
+          const name = item.airline || item.operator || `${item.origin} → ${item.destination}`;
+          return `${name} ${formatCurrency(item.predictedFare || 0)}${
+            seats > 1 ? ` × ${seats} travellers` : ""
+          }`;
+        })
+        .join(" + ");
+      if (localTransport > 0) {
+        notes.transport += ` + ${formatCurrency(localTransport)} local travel`;
+      }
+    } else if (explain?.transport) {
+      const t = explain.transport;
+      notes.transport = `${t.estimated ? "Typical" : "Quoted"} ${t.mode} fare ${formatCurrency(
+        t.farePerPerson,
+      )} × ${t.people} traveller${t.people > 1 ? "s" : ""}${
+        t.local > 0 ? ` + ${formatCurrency(t.local)} local travel` : ""
+      } — nothing ticked yet`;
+    }
+
+    const activitiesTotal = (itinerary?.days || []).reduce((sum, day) => {
+      const dayActivities = day.activities || [];
+      return (
+        sum +
+        dayActivities.reduce((daySum, activity, i) => {
+          if (selections.excluded.has(selectionKey("activity", day.day, i))) return daySum;
+          return daySum + (Number(activity.cost) || 0);
+        }, 0)
+      );
+    }, 0);
+
+    const pricedActivities = (itinerary?.days || []).reduce((count, day) => {
+      const dayActivities = day.activities || [];
+      return (
+        count +
+        dayActivities.filter(
+          (activity, i) =>
+            !selections.excluded.has(selectionKey("activity", day.day, i)) &&
+            (Number(activity.cost) || 0) > 0,
+        ).length
+      );
+    }, 0);
+
+    if (pricedActivities > 0) {
+      notes.activities = `${pricedActivities} ticked ${
+        pricedActivities === 1 ? "activity" : "activities"
+      } with an entry or booking cost`;
+    }
+
+    const food = Number(staticBudget.food) || 0;
+    if (explain?.food?.source === "meals") {
+      notes.food = `${explain.food.mealCount} meal${
+        explain.food.mealCount === 1 ? "" : "s"
+      } priced in the day plan`;
+    } else if (explain?.food) {
+      notes.food = `${formatCurrency(explain.food.perPersonPerDay)} per person per day × ${
+        explain.food.people
+      } traveller${explain.food.people > 1 ? "s" : ""} × ${explain.food.days} day${
+        explain.food.days > 1 ? "s" : ""
+      }`;
+    }
+
+    // Recomputed rather than carried over: the static figure was 5% of the
+    // AI's original lines, so it drifts as soon as a different hotel or fare
+    // is ticked.
+    const miscRate = Number(explain?.miscellaneous?.rate) || 0.05;
+    const miscellaneous = Math.round(
+      (accommodation + food + transport + activitiesTotal) * miscRate,
+    );
+    notes.miscellaneous = `${Math.round(miscRate * 100)}% buffer on the lines above`;
+
+    const total = accommodation + food + transport + activitiesTotal + miscellaneous;
+
+    const requestedBudget = Number(itinerary?.budgetVerdict?.requestedBudget) || 0;
+    const withinBudget = requestedBudget > 0 ? total <= requestedBudget : null;
+    const difference = requestedBudget > 0 ? Math.abs(total - requestedBudget) : 0;
+
+    return {
+      accommodation,
+      food,
+      transport,
+      activities: activitiesTotal,
+      miscellaneous,
+      total,
+      currency,
+      requestedBudget,
+      withinBudget,
+      difference,
+      notes,
+      people,
+      days: tripDays,
+    };
+  }, [itinerary, accommodations, selections]);
 
   if (status === "loading") {
     return (
@@ -1502,16 +1747,6 @@ export default function ItineraryResults({
    * older saved trips have no verdict and simply show the breakdown alone.
    */
   const budgetVerdict = itinerary?.budgetVerdict ?? null;
-
-  const budgetBreakdown = itinerary?.budgetBreakdown ?? {
-    accommodation: 0,
-    food: 0,
-    transport: 0,
-    activities: 0,
-    miscellaneous: 0,
-    total: 0,
-    currency: "INR",
-  };
 
   const tips = itinerary.tips || [];
 
@@ -1556,7 +1791,12 @@ export default function ItineraryResults({
           </span>
         </div>
 
-        <WeatherCard weather={itinerary.weather} destination={itinerary.destination} />
+        <WeatherCard
+          weather={itinerary.weather}
+          destination={itinerary.destination}
+          startDate={itinerary.startDate}
+          endDate={itinerary.endDate}
+        />
 
         <div className="prose prose-slate max-w-none">
           <h2 className="text-xl font-bold mb-3">Overview</h2>
@@ -1581,117 +1821,11 @@ export default function ItineraryResults({
             getChosenTransport={getChosenTransport}
           />
 
-          <LazyMount minHeight={300}>
+          <LazyMount minHeight={300} label="Load price history chart">
             <PriceHistoryGraph itinerary={itinerary} sourceCity={sourceCity} />
           </LazyMount>
 
         
-          {/* ── Digital Receipt ── */}
-          {/* ── Digital Receipt ── */}
-          <div className="flex justify-center mb-10 mt-6">
-            <div
-              style={{ backgroundColor: "#f9f7f1", fontFamily: '"Roboto Mono", "Courier New", monospace' }}
-              className="w-full  shadow-xl p-8 text-[#1a1a1a] relative"
-            >
-              {/* Top jagged edge effect (optional but nice for receipt, using CSS mask or simple border) */}
-              <div className="absolute top-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'top -5px left 0' }}></div>
-              
-              <h3 className="text-center text-4xl font-black uppercase tracking-tighter mb-8" style={{ fontFamily: 'Inter, sans-serif' }}>
-                Total Estimate
-              </h3>
-
-              <div className="text-xs font-bold mb-4 tracking-widest text-slate-500">
-                TRIP BREAKDOWN
-              </div>
-
-              <div className="space-y-3">
-                {[
-                  { label: "ACCOMMODATION", key: "accommodation" },
-                  { label: "FOOD & DINING",  key: "food" },
-                  { label: "TRANSPORT",      key: "transport" },
-                  { label: "ACTIVITIES",     key: "activities" },
-                  { label: "MISCELLANEOUS",  key: "miscellaneous" },
-                ].map(({ label, key }) => {
-                  const value = budgetBreakdown?.[key] ?? 0;
-                  if (value === 0) return null; // Don't show 0 value items if we want cleaner look, but up to us.
-                  return (
-                    <div key={key} className="flex items-end text-sm">
-                      <span className="shrink-0 font-medium">{label}</span>
-                      <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50"></span>
-                      <span className="shrink-0 font-bold tabular-nums">
-                        {formatCurrency(value)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-8 pt-4 border-t-2 border-slate-800 flex justify-between items-end">
-                <span className="font-bold uppercase tracking-wider text-sm">Total Estimate</span>
-                <span className="text-xl font-bold tabular-nums">{formatCurrency(budgetBreakdown?.total)}</span>
-              </div>
-
-              {/* ── Against the preferred budget ── */}
-              {budgetVerdict?.requestedBudget > 0 && (
-                <div className="mt-5 pt-4 border-t border-dashed border-slate-400">
-                  <div className="flex items-end text-sm">
-                    <span className="shrink-0 font-medium">PREFERRED BUDGET</span>
-                    <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
-                    <span className="shrink-0 font-bold tabular-nums">
-                      {formatCurrency(budgetVerdict.requestedBudget)}
-                    </span>
-                  </div>
-
-                  <div
-                    className={`flex items-end text-sm mt-2 ${
-                      budgetVerdict.withinBudget ? "text-emerald-700" : "text-amber-800"
-                    }`}
-                  >
-                    <span className="shrink-0 font-medium">
-                      {budgetVerdict.withinBudget ? "UNDER BY" : "OVER BY"}
-                    </span>
-                    <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
-                    <span className="shrink-0 font-bold tabular-nums">
-                      {formatCurrency(Math.abs(budgetVerdict.difference ?? 0))}
-                    </span>
-                  </div>
-
-                  {!budgetVerdict.withinBudget && budgetVerdict.suggestedBudget > 0 && (
-                    <div className="flex items-end text-sm mt-2 font-bold">
-                      <span className="shrink-0">SUGGESTED BUDGET</span>
-                      <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
-                      <span className="shrink-0 tabular-nums">
-                        {formatCurrency(budgetVerdict.suggestedBudget)}
-                      </span>
-                    </div>
-                  )}
-
-                  {budgetVerdict.notes?.length > 0 && (
-                    <ul
-                      className="mt-4 space-y-1.5 text-[11px] leading-snug text-slate-600"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      {budgetVerdict.notes.map((note) => (
-                        <li key={note} className="flex gap-1.5">
-                          <span aria-hidden="true">&middot;</span>
-                          <span>{note}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-12 flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                <span>Detailed breakdown</span>
-                <span>{itinerary.totalDays} DAYS</span>
-              </div>
-              
-               <div className="absolute bottom-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'bottom -5px left 0', transform: 'rotate(180deg)' }}></div>
-            </div>
-          </div>
-
-
           {/* ── Where to Stay ── */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
@@ -2012,34 +2146,130 @@ export default function ItineraryResults({
             ))}
           </ul>
 
-          {/* ── External Booking Links ── */}
-          <BookingLinks
-            origin={sourceCity}
-            destination={itinerary.destination}
-            startDate={itinerary.startDate}
-            endDate={itinerary.endDate}
-            adults={
-              itinerary.adults ||
-              itinerary.groupSize?.adults ||
-              itinerary.userAnswers?.adults ||
-              1
-            }
-          />
+          {/* ── Digital Receipt ── */}
+          <div className="flex justify-center mb-10 mt-6">
+            <div
+              style={{ backgroundColor: "#f9f7f1", fontFamily: '"Roboto Mono", "Courier New", monospace' }}
+              className="w-full  shadow-xl p-8 text-[#1a1a1a] relative"
+            >
+              {/* Top jagged edge effect (optional but nice for receipt, using CSS mask or simple border) */}
+              <div className="absolute top-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'top -5px left 0' }}></div>
+              
+              <h3 className="text-center text-4xl font-black uppercase tracking-tighter mb-8" style={{ fontFamily: 'Inter, sans-serif' }}>
+                Total Estimate
+              </h3>
+
+              <div className="text-xs font-bold mb-4 tracking-widest text-slate-500">
+                TRIP BREAKDOWN
+              </div>
+
+              <div className="space-y-3.5">
+                {[
+                  { label: "ACCOMMODATION", key: "accommodation" },
+                  { label: "FOOD & DINING",  key: "food" },
+                  { label: "TRANSPORT",      key: "transport" },
+                  { label: "ACTIVITIES",     key: "activities" },
+                  { label: "MISCELLANEOUS",  key: "miscellaneous" },
+                ].map(({ label, key }) => {
+                  const value = liveBudget[key] ?? 0;
+                  if (value === 0) return null; // Don't show 0 value items if we want cleaner look, but up to us.
+                  const note = liveBudget.notes?.[key];
+                  return (
+                    <div key={key}>
+                      <div className="flex items-end text-sm">
+                        <span className="shrink-0 font-medium">{label}</span>
+                        <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50"></span>
+                        <span className="shrink-0 font-bold tabular-nums">
+                          {formatCurrency(value)}
+                        </span>
+                      </div>
+                      {/* What drove the number, in the same arithmetic the
+                          server used - so a surprising line can be traced back
+                          to the hotel, fare or party size behind it. */}
+                      {note && (
+                        <p
+                          className="text-[11px] leading-snug text-slate-500 mt-0.5 pr-1"
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          {note}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 pt-4 border-t-2 border-slate-800 flex justify-between items-end">
+                <span className="font-bold uppercase tracking-wider text-sm">Total Estimate</span>
+                <span className="text-xl font-bold tabular-nums">{formatCurrency(liveBudget.total)}</span>
+              </div>
+
+              {/* ── Against the preferred budget ── */}
+              {liveBudget.requestedBudget > 0 && (
+                <div className="mt-5 pt-4 border-t border-dashed border-slate-400">
+                  <div className="flex items-end text-sm">
+                    <span className="shrink-0 font-medium">PREFERRED BUDGET</span>
+                    <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
+                    <span className="shrink-0 font-bold tabular-nums">
+                      {formatCurrency(liveBudget.requestedBudget)}
+                    </span>
+                  </div>
+
+                  <div
+                    className={`flex items-end text-sm mt-2 ${
+                      liveBudget.withinBudget ? "text-emerald-700" : "text-amber-800"
+                    }`}
+                  >
+                    <span className="shrink-0 font-medium">
+                      {liveBudget.withinBudget ? "UNDER BY" : "OVER BY"}
+                    </span>
+                    <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
+                    <span className="shrink-0 font-bold tabular-nums">
+                      {formatCurrency(Math.abs(liveBudget.difference ?? 0))}
+                    </span>
+                  </div>
+
+                  {!liveBudget.withinBudget && budgetVerdict.suggestedBudget > 0 && (
+                    <div className="flex items-end text-sm mt-2 font-bold">
+                      <span className="shrink-0">SUGGESTED BUDGET</span>
+                      <span className="flex-grow border-b-2 border-dotted border-slate-300 mx-2 mb-1.5 opacity-50" />
+                      <span className="shrink-0 tabular-nums">
+                        {formatCurrency(budgetVerdict.suggestedBudget)}
+                      </span>
+                    </div>
+                  )}
+
+                  {budgetVerdict.notes?.length > 0 && (
+                    <ul
+                      className="mt-4 space-y-1.5 text-[11px] leading-snug text-slate-600"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      {budgetVerdict.notes.map((note) => (
+                        <li key={note} className="flex gap-1.5">
+                          <span aria-hidden="true">&middot;</span>
+                          <span>{note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-12 flex justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                <span>Detailed breakdown</span>
+                <span>{itinerary.totalDays} DAYS</span>
+              </div>
+              
+               <div className="absolute bottom-0 left-0 right-0 h-2 bg-repeat-x" style={{ backgroundImage: 'radial-gradient(circle, transparent 4px, #f9f7f1 4px)', backgroundSize: '10px 10px', backgroundPosition: 'bottom -5px left 0', transform: 'rotate(180deg)' }}></div>
+            </div>
+          </div>
         </div>
       </TicketContainer>
 
       {selectable && (
         <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-sm text-slate-600">
-            Your PDF and email will include{" "}
-            <span className="font-semibold text-slate-800">{selectedCount.hotels}</span> stay
-            {selectedCount.hotels === 1 ? "" : "s"},{" "}
-            <span className="font-semibold text-slate-800">{selectedCount.flights}</span> flight
-            {selectedCount.flights === 1 ? "" : "s"},{" "}
-            <span className="font-semibold text-slate-800">{selectedCount.places}</span> place
-            {selectedCount.places === 1 ? "" : "s"} and{" "}
-            <span className="font-semibold text-slate-800">{selectedCount.activities}</span> activit
-            {selectedCount.activities === 1 ? "y" : "ies"}.
+            Your PDF and email will include <span className="font-semibold text-slate-800">{selectionSummary}</span>.
           </p>
           <SelectionStatus saveState={saveState} />
         </div>
@@ -2114,43 +2344,3 @@ export default function ItineraryResults({
   );
 }
 
-// ── BookingLinks ──────────────────────────────────────────────────────────────
-// Provides external redirect links to official travel booking platforms.
-// Tripzy does NOT handle payments - it redirects to the platform's own site.
-
-function BookingLinks({ origin, destination, startDate, endDate, adults }) {
-  const groups = getBookingPlatforms({ origin, destination, startDate, endDate, adults });
-
-  return (
-    <div id="explore-prices" className="mt-8 mb-2">
-      <h2 className="text-xl font-bold mb-1">Explore &amp; Compare Prices</h2>
-      <p className="text-sm text-slate-500 mb-4">
-        Opens the official site with this trip's cities and dates pre-filled. Tripzee does not sell tickets or handle payments.
-      </p>
-      <div className="grid gap-4 sm:grid-cols-3">
-        {groups.map((group) => (
-          <div key={group.category} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <p className="font-semibold text-sm text-slate-700 mb-3">
-              {group.icon} {group.category}
-            </p>
-            <div className="flex flex-row flex-wrap gap-2">
-              {group.links.map((platform) => (
-                <a
-                  key={platform.name}
-                  href={platform.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 whitespace-nowrap"
-                  style={{ backgroundColor: platform.color }}
-                >
-                  {platform.name}
-                  <span className="ml-auto text-xs opacity-80">↗</span>
-                </a>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}

@@ -5,7 +5,7 @@ import ItineraryResults from "./ItineraryResults";
 import { unwrapItineraryRecord } from "./unwrapItinerary";
 import { fetchPublicItinerary } from "../../lib/authApi";
 import { downloadItineraryIcs } from "./itineraryToIcs";
-import logoImg from "../../assets/images/logo.png";
+import logoImg from "../../assets/images/logo.webp";
 
 export default function ShareItineraryPage() {
   const { id } = useParams();
