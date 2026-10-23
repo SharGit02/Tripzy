@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeProperty } from "./hotels.service.js";
+import { normalizeProperty, classifySerpFailure, SerpFailure } from "./hotels.service.js";
 import { buildSelectionFilter } from "../../services/pdf/pdf.service.js";
 import { ItineraryAccommodationSchema } from "../itinerary/itinerary.schema.js";
 
@@ -133,4 +133,36 @@ describe("accommodation URL fields", () => {
             expect(() => ItineraryAccommodationSchema.parse({ ...base, bookingLink })).toThrow();
         },
     );
+});
+
+/*
+ * The waterfall only spills to the next key when classify() says another key
+ * could fix it. Get this wrong and either an exhausted key never fails over
+ * (every request 502s) or a bad query burns all keys before surfacing.
+ */
+describe("classifySerpFailure", () => {
+    it("treats an out-of-searches plan as exhausted so the next key is tried", () => {
+        expect(classifySerpFailure(new SerpFailure("exhausted", "plan out of searches")))
+            .toEqual({ kind: "exhausted", reason: "plan out of searches" });
+    });
+
+    it("honours a Retry-After hint as the gate cooldown", () => {
+        expect(classifySerpFailure(new SerpFailure("exhausted", "rate limit reached", 30_000)))
+            .toEqual({ kind: "exhausted", reason: "rate limit reached", cooldownMs: 30_000 });
+    });
+
+    it("marks a rejected key invalid, not transient", () => {
+        expect(classifySerpFailure(new SerpFailure("invalid", "key rejected (401)")).kind)
+            .toBe("invalid");
+    });
+
+    it("keeps a bad query fatal so it does not burn every key", () => {
+        expect(classifySerpFailure(new SerpFailure("fatal", "bad request (400)")).kind)
+            .toBe("fatal");
+    });
+
+    it("blames the upstream, not the key, for anything unclassified", () => {
+        expect(classifySerpFailure(new Error("boom")))
+            .toEqual({ kind: "transient", reason: "boom" });
+    });
 });

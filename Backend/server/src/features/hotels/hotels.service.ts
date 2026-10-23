@@ -3,6 +3,11 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { hotelCache } from "../../db/schema.js";
 import { env } from "../../config/env.js";
+import {
+    KeyWaterfall,
+    type FailureKind,
+    type KeyFailure,
+} from "../../services/ai/keyWaterfall.js";
 
 const SERP_API_URL = "https://serpapi.com/search";
 const UPSTREAM_TIMEOUT_MS = 15_000;
@@ -154,11 +159,59 @@ function nightsBetween(checkIn: string, checkOut: string): number {
     return Math.max(1, Math.round((end - start) / 86_400_000));
 }
 
-async function fetchFromSerpApi(query: HotelQuery): Promise<Hotel[]> {
-    if (!env.SERP_API_KEY) {
-        throw httpError(503, "Hotel search is not configured.");
+/**
+ * A SerpApi failure, pre-classified for the key waterfall. Thrown by
+ * `fetchOnce` so the waterfall knows whether another key could fix it.
+ */
+export class SerpFailure extends Error {
+    constructor(
+        readonly kind: FailureKind,
+        readonly reason: string,
+        readonly cooldownMs?: number,
+    ) {
+        super(reason);
+        this.name = "SerpFailure";
     }
+}
 
+export function classifySerpFailure(error: unknown): KeyFailure {
+    if (error instanceof SerpFailure) {
+        return {
+            kind: error.kind,
+            reason: error.reason,
+            ...(error.cooldownMs !== undefined ? { cooldownMs: error.cooldownMs } : {}),
+        };
+    }
+    // Anything unclassified is treated as the upstream's fault, not the key's.
+    return { kind: "transient", reason: error instanceof Error ? error.message : "unknown error" };
+}
+
+let serpWaterfall: KeyWaterfall | null = null;
+
+/**
+ * Built lazily: `new KeyWaterfall` throws when handed zero keys, and SerpApi is
+ * optional — the app must still boot and answer 503 here without a key.
+ */
+function getSerpWaterfall(): KeyWaterfall {
+    if (!serpWaterfall) {
+        serpWaterfall = new KeyWaterfall({
+            label: "serpapi",
+            keys: env.SERP_API_KEYS,
+            classify: classifySerpFailure,
+        });
+    }
+    return serpWaterfall;
+}
+
+/** Masked per-key state, for the health endpoint. Contains no keys. */
+export function serpStatus(): Record<string, unknown> {
+    return env.SERP_API_KEYS.length > 0
+        ? getSerpWaterfall().status()
+        : { label: "serpapi", total: 0, ready: 0, gates: [] };
+}
+
+/** One SerpApi search with one key. Failures are classified, never swallowed. */
+async function fetchOnce(query: HotelQuery, apiKey: string): Promise<Hotel[]> {
     const url = new URL(SERP_API_URL);
     url.searchParams.set("engine", "google_hotels");
     url.searchParams.set("q", query.destination);
@@ -168,23 +221,36 @@ async function fetchFromSerpApi(query: HotelQuery): Promise<Hotel[]> {
     url.searchParams.set("currency", "INR");
     url.searchParams.set("gl", "in");
     url.searchParams.set("hl", "en");
-    url.searchParams.set("api_key", env.SERP_API_KEY);
+    url.searchParams.set("api_key", apiKey);
 
     let response: Response;
     try {
         response = await fetch(url, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) });
-    } catch {
-        throw httpError(504, "Hotel search did not respond in time.");
+    } catch (error) {
+        const timedOut = error instanceof Error && error.name === "TimeoutError";
+        throw new SerpFailure("transient", timedOut ? "request timed out" : "network error");
     }
 
     if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-            throw httpError(503, "Hotel search credentials were rejected by SerpApi.");
+            throw new SerpFailure("invalid", `key rejected (${response.status})`);
         }
         if (response.status === 429) {
-            throw httpError(429, "Hotel search quota reached. Please try again later.");
+            // Honour Retry-After when SerpApi sends one, so the gate reopens
+            // exactly when the window does instead of on our generic cooldown.
+            const retryAfter = Number(response.headers.get("retry-after"));
+            throw new SerpFailure(
+                "exhausted",
+                "rate limit reached",
+                Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : undefined,
+            );
         }
-        throw httpError(502, "Hotel search is temporarily unavailable.");
+        if (response.status >= 500) {
+            throw new SerpFailure("transient", `upstream ${response.status}`);
+        }
+        // A 4xx that is not key-shaped means our query is wrong; no other key
+        // fixes that, so stop the waterfall rather than burning every key.
+        throw new SerpFailure("fatal", `bad request (${response.status})`);
     }
 
     const body = (await response.json()) as any;
@@ -192,7 +258,14 @@ async function fetchFromSerpApi(query: HotelQuery): Promise<Hotel[]> {
     // SerpApi answers 200 with an `error` string for an exhausted plan or an
     // unsupported query, so a non-ok status is not the only failure mode.
     if (body?.error) {
-        throw httpError(502, `Hotel search failed: ${String(body.error)}`);
+        const message = String(body.error);
+        // "You've run out of searches" / "has run out of searches" — plan
+        // exhausted, which is exactly what another key fixes.
+        const outOfSearches = /run out of searches|exhausted|plan limit/i.test(message);
+        const badKey = /invalid api key|unauthorized|missing api key/i.test(message);
+        if (outOfSearches) throw new SerpFailure("exhausted", "plan out of searches");
+        if (badKey) throw new SerpFailure("invalid", "key rejected by SerpApi");
+        throw new SerpFailure("fatal", `serpapi: ${message}`);
     }
 
     const nights = nightsBetween(query.checkIn, query.checkOut);
@@ -200,6 +273,20 @@ async function fetchFromSerpApi(query: HotelQuery): Promise<Hotel[]> {
     return (Array.isArray(body?.properties) ? body.properties : [])
         .map((property: any) => normalizeProperty(property, query.destination, nights))
         .filter((hotel: Hotel | null): hotel is Hotel => hotel !== null && hotel.pricePerNight > 0);
+}
+
+/**
+ * SerpApi search across every configured key, highest priority first. Mirrors
+ * the Gemini key waterfall: a key that is out of searches or rejected spills
+ * down to the next one and is skipped for a cooldown, so an exhausted key does
+ * not cost every later request a wasted round-trip.
+ */
+async function fetchFromSerpApi(query: HotelQuery): Promise<Hotel[]> {
+    if (env.SERP_API_KEYS.length === 0) {
+        throw httpError(503, "Hotel search is not configured.");
+    }
+
+    return getSerpWaterfall().run((apiKey) => fetchOnce(query, apiKey));
 }
 
 /**

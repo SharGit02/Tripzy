@@ -62,11 +62,9 @@ const envSchema = z
         NVIDIA_MODEL_FALLBACKS: z.string().trim().optional(),
         NVIDIA_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
 
-        // SerpApi key, used for the Google Hotels engine. Optional and
-        // degrades like OPEN_WEATHER_API: the hotels endpoint answers 503 and
-        // itinerary generation falls back to AI-suggested stays instead of
-        // blocking boot.
-        SERP_API_KEY: z.string().trim().min(1).optional(),
+        // SERP_API_KEY / SERP_API_KEY_2... are read straight from process.env
+        // by collectNumberedKeys below, like the Gemini keys, so they are not
+        // declared here.
 
         // OAuth configuration (Google & GitHub)
         GOOGLE_CLIENT_ID: z.string().trim().optional(),
@@ -154,6 +152,12 @@ export const env = {
     GEMINI_API_KEYS: collectNumberedKeys("GEMINI_API_KEY"),
     // Model fallback chain (comma-separated, tried in order).
     GEMINI_MODEL_FALLBACKS: data.GEMINI_MODEL_FALLBACKS,
+
+    // SerpApi keys in the same waterfall priority order as the Gemini keys.
+    // Optional: with none configured the hotels endpoint answers 503 and
+    // itinerary generation falls back to AI-suggested stays, rather than
+    // blocking boot.
+    SERP_API_KEYS: collectNumberedKeys("SERP_API_KEY"),
 
     RESEND_API_KEY: data.RESEND_API_KEY,
 };
