@@ -32,7 +32,8 @@ const pool = new Pool({
     connectionString: env.DATABASE_URL,
     max: 1,
     connectionTimeoutMillis: 30_000,
-    ssl: { rejectUnauthorized: false },
+    // Matches client.ts — see the note there on why verification is explicit.
+    ssl: { rejectUnauthorized: true },
 });
 
 try {
