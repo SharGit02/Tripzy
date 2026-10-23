@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from "node:dns";
+import ipaddr from "ipaddr.js";
+import { Agent, fetch as undiciFetch } from "undici";
 import type {
     ItineraryOutput,
     ItineraryPlace,
@@ -44,84 +45,126 @@ const IMAGE_FETCH_TIMEOUT_MS = 5000;
 const IMAGE_FETCH_CONCURRENCY = 4;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // a hotel/place photo has no business being bigger
 
-/** True for a private, loopback, link-local, unspecified or carrier-NAT
- * address — the ranges a server must never be tricked into fetching,
- * cloud metadata endpoints (169.254.169.254) among them. */
-function isPrivateOrReservedIp(address: string): boolean {
-    if (isIP(address) === 4) {
-        const [a, b] = address.split(".").map(Number);
-        if (a === 10 || a === 127 || a === 0) return true; // 10/8, 127/8, 0/8
-        if (a === 169 && b === 254) return true; // 169.254/16 link-local incl. cloud metadata
-        if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12
-        if (a === 192 && b === 168) return true; // 192.168/16
-        if (a === 100 && b >= 64 && b <= 127) return true; // 100.64/10 carrier-grade NAT
-        return false;
+/**
+ * True for anything that isn't ordinary public unicast space — private,
+ * loopback, link-local, carrier-NAT, documentation/reserved ranges, cloud
+ * metadata (169.254.169.254) among them. Delegates to ipaddr.js rather than
+ * a hand-rolled range list: it correctly unwraps IPv4-mapped, NAT64 and
+ * 6to4 IPv6 forms before classifying (confirmed: `::ffff:169.254.169.254`
+ * and `64:ff9b::169.254.169.254` both correctly land outside `unicast`),
+ * which a hand-rolled list reliably gets wrong at exactly these edges — see
+ * the `ip-address` package's own CVE history for that same class of bug.
+ */
+function isReservedIp(address: string): boolean {
+    try {
+        return ipaddr.process(address).range() !== "unicast";
+    } catch {
+        return true; // unparsable address — never trust it
     }
-    const lower = address.toLowerCase();
-    if (lower === "::1" || lower === "::") return true; // loopback / unspecified
-    if (["fe8", "fe9", "fea", "feb"].some((p) => lower.startsWith(p))) return true; // fe80::/10 link-local
-    if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // fc00::/7 unique local
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped IPv6
-    if (mapped) return isPrivateOrReservedIp(mapped[1]);
-    return false;
 }
 
 /**
- * Blocks SSRF via a hotel/place image URL: these can originate from
- * AI-generated itinerary data, not only vetted SerpApi results, so the
- * server cannot trust them to point anywhere safe. Requires https, then
- * resolves the hostname and rejects it if ANY resolved address lands in a
- * reserved range — covering both a literal IP typed into the URL and a
- * hostname (e.g. one rebound via DNS) that resolves to one.
+ * Pins the DNS resolution used to actually CONNECT to the exact address
+ * that was just validated, with no gap between the two. A plain
+ * "resolve, validate, then fetch(url)" leaves a DNS-rebinding window: fetch
+ * re-resolves the hostname itself moments later, so a server that answers a
+ * safe address for the check and an internal one for the real connection
+ * sails straight through. Passed as undici's `connect.lookup`, this becomes
+ * the ONLY resolution that ever happens for the request — Node's net/tls
+ * layer calls it both in "all candidates" mode (`options.all`, used for
+ * Happy-Eyeballs dual-stack connects) and in single-address mode depending
+ * on the code path, so both shapes are handled; either way, every candidate
+ * is filtered through `isReservedIp` before it can be dialed, and nothing
+ * safe-but-unreachable is silently followed into it.
  */
-async function isSafePublicImageUrl(url: string): Promise<boolean> {
-    let parsed: URL;
-    try {
-        parsed = new URL(url);
-    } catch {
-        return false;
-    }
-    if (parsed.protocol !== "https:") return false;
+function safeLookup(
+    hostname: string,
+    options: LookupOptions,
+    callback: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void,
+): void {
+    dnsLookup(hostname, { all: true, verbatim: true }, (err, addresses) => {
+        if (err) {
+            callback(err, "");
+            return;
+        }
+        const list = Array.isArray(addresses) ? addresses : [addresses];
+        const safe = list.filter((entry) => !isReservedIp(entry.address));
+        if (safe.length === 0) {
+            callback(Object.assign(new Error(`No public address for ${hostname}`), { code: "ENOTFOUND" }), "");
+            return;
+        }
+        if (options?.all) {
+            callback(null, safe);
+            return;
+        }
+        callback(null, safe[0].address, safe[0].family);
+    });
+}
 
-    let addresses: { address: string }[];
+// Scoped to just this file's fetches via the `dispatcher` option below —
+// does not touch the global fetch dispatcher every other outbound call in
+// this process uses.
+const safeImageAgent = new Agent({ connect: { lookup: safeLookup } });
+
+function isHttpsUrl(url: string): boolean {
     try {
-        addresses = await lookup(parsed.hostname, { all: true });
+        return new URL(url).protocol === "https:";
     } catch {
         return false;
     }
-    return addresses.length > 0 && addresses.every(({ address }) => !isPrivateOrReservedIp(address));
 }
 
 /**
  * Fetches a single hotel/place photo for embedding via `doc.image()`, which
- * needs raw bytes, not a URL. `isSafePublicImageUrl` blocks SSRF before any
- * request is made; `redirect: "manual"` (so a 3xx response fails `.ok`
- * rather than being followed) stops a redirect from reaching an unsafe
- * target after the fact; the size cap bounds a malicious or oversized
- * response. Every failure mode (missing/unsafe URL, 404, timeout, a
- * redirect, a non-image response, an oversized one) resolves to `null`
- * rather than throwing, so a broken photo never takes down the whole PDF —
- * callers just render the card without a thumbnail, exactly as before this
- * existed.
+ * needs raw bytes, not a URL. These URLs can come from AI-generated
+ * itinerary data, not only vetted SerpApi results, so the server cannot
+ * trust them to point anywhere safe: `safeImageAgent`'s pinned lookup blocks
+ * SSRF (including DNS rebinding) at the actual connection, `redirect:
+ * "manual"` (a 3xx response just fails `.ok`) stops a redirect from
+ * reaching an unsafe target after the fact, and the body is read as a
+ * stream with a running byte count — aborted the moment it crosses the cap,
+ * rather than buffered in full and only checked afterward, so an attacker
+ * can't force a large download just by lying about Content-Length. Every
+ * failure mode (missing/non-https/unsafe URL, 404, timeout, a redirect, a
+ * non-image response, an oversized one) resolves to `null` rather than
+ * throwing, so a broken photo never takes down the whole PDF — callers just
+ * render the card without a thumbnail.
  */
 async function fetchImageBuffer(url: string | undefined): Promise<Buffer | null> {
-    if (!url) return null;
-    if (!(await isSafePublicImageUrl(url))) return null;
+    if (!url || !isHttpsUrl(url)) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+
     try {
-        const response = await fetch(url, {
-            signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+        const response = await undiciFetch(url, {
+            dispatcher: safeImageAgent,
+            signal: controller.signal,
             redirect: "manual",
         });
-        if (!response.ok) return null;
+        if (!response.ok || !response.body) return null;
+
         const contentType = response.headers.get("content-type") || "";
         if (!contentType.startsWith("image/")) return null;
+
         const declaredLength = Number(response.headers.get("content-length") || 0);
         if (declaredLength > MAX_IMAGE_BYTES) return null;
-        const buffer = Buffer.from(await response.arrayBuffer());
-        if (buffer.length > MAX_IMAGE_BYTES) return null;
-        return buffer;
+
+        const chunks: Buffer[] = [];
+        let total = 0;
+        for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
+            total += chunk.length;
+            if (total > MAX_IMAGE_BYTES) {
+                controller.abort();
+                return null;
+            }
+            chunks.push(Buffer.from(chunk));
+        }
+        return Buffer.concat(chunks);
     } catch {
         return null;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
