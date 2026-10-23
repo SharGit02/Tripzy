@@ -207,6 +207,15 @@ export function fetchFlightFarePrediction(payload) {
   });
 }
 
+// Rail fares are not persisted server-side (no history endpoint): the chosen
+// train is stored inside the itinerary's selections instead.
+export function fetchRailFarePrediction(payload) {
+  return request("/rail-fare/predict", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchFlightFareHistory() {
   return request("/flight-fare/history");
 }

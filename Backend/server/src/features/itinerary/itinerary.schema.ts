@@ -100,6 +100,20 @@ export const ItinerarySelectionsSchema = z.object({
             }),
         )
         .default([]),
+    // Same deal for trains: rail fares come from the ML service per request and
+    // are not part of the generated document either. No train identity exists
+    // in the rail model, so a chosen train is a route + date + fare.
+    trains: z
+        .array(
+            z.object({
+                origin: z.string().optional(),
+                destination: z.string().optional(),
+                date: z.string().optional(),
+                dayOfWeek: z.string().optional(),
+                predictedFare: z.number().nonnegative().optional(),
+            }),
+        )
+        .default([]),
     updatedAt: z.string().optional(),
 });
 

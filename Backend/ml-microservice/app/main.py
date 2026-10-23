@@ -18,8 +18,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException
 
-from app import predictor
-from app.schemas import HealthResponse, PredictWindowRequest, PredictWindowResponse
+from app import predictor, rail_predictor
+from app.schemas import (
+    HealthResponse,
+    PredictWindowRequest,
+    PredictWindowResponse,
+    RailPredictWindowRequest,
+    RailPredictWindowResponse,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR.parent / ".env")
@@ -28,11 +34,21 @@ MODEL_PATH = os.environ.get("ML_MODEL_PATH", str(BASE_DIR / "models" / "flight_f
 DATA_PATH = os.environ.get(
     "ML_DATA_PATH", str(BASE_DIR / "data" / "Indian_Domestic_Flight_Historical_Dataset_FINAL.parquet")
 )
+RAIL_MODEL_PATH = os.environ.get(
+    "ML_RAIL_MODEL_PATH", str(BASE_DIR / "models" / "lightgbm_rail_model_3_inputs.pkl")
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     predictor.load_artifacts(MODEL_PATH, DATA_PATH)
+    # Rail is loaded best-effort: a missing/corrupt rail .pkl must not take the
+    # flight endpoints (and with them the whole process) down with it. The rail
+    # endpoint answers 503 instead.
+    try:
+        rail_predictor.load_artifacts(RAIL_MODEL_PATH)
+    except Exception as error:  # noqa: BLE001 - logged, then degraded
+        print(f"[rail] Model unavailable: {error}", flush=True)
     yield
 
 
@@ -52,6 +68,8 @@ def health() -> HealthResponse:
         model_loaded=predictor.is_loaded(),
         data_rows=predictor.data_row_count(),
         known_routes=predictor.known_route_count(),
+        rail_model_loaded=rail_predictor.is_loaded(),
+        rail_stations=rail_predictor.station_count(),
     )
 
 
@@ -68,6 +86,32 @@ def predict_window(body: PredictWindowRequest) -> PredictWindowResponse:
     result = predictor.predict_window(origin, destination, body.start_date, body.window_days)
 
     return PredictWindowResponse(
+        origin=origin,
+        destination=destination,
+        start_date=body.start_date,
+        window_days=body.window_days,
+        generated_at=datetime.now(timezone.utc),
+        **result,
+    )
+
+
+@app.post(
+    "/predict/rail/window",
+    response_model=RailPredictWindowResponse,
+    dependencies=[Depends(verify_internal_key)],
+)
+def predict_rail_window(body: RailPredictWindowRequest) -> RailPredictWindowResponse:
+    if not rail_predictor.is_loaded():
+        raise HTTPException(status_code=503, detail="Rail model is not loaded.")
+
+    try:
+        origin, destination = rail_predictor.canonicalize_route(body.origin, body.destination)
+    except (rail_predictor.UnknownStationError, rail_predictor.SameStationError) as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
+    result = rail_predictor.predict_window(origin, destination, body.start_date, body.window_days)
+
+    return RailPredictWindowResponse(
         origin=origin,
         destination=destination,
         start_date=body.start_date,

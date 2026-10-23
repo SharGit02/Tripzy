@@ -74,6 +74,89 @@ function selectedFlights(itinerary: ItineraryOutput): SelectedFlight[] {
     return Array.isArray(flights) ? flights : [];
 }
 
+type SelectedTrain = {
+    origin?: string;
+    destination?: string;
+    date?: string;
+    dayOfWeek?: string;
+    predictedFare?: number;
+};
+
+function selectedTrains(itinerary: ItineraryOutput): SelectedTrain[] {
+    const trains = (itinerary as any)?.selections?.trains;
+    return Array.isArray(trains) ? trains : [];
+}
+
+type FareCard = {
+    /** Airline for a flight, origin station for a train. */
+    label: string;
+    fare?: number;
+    route: string;
+    meta: (string | undefined)[];
+};
+
+/**
+ * Shared by the flight and train sections. Both are INCLUSIONS (see
+ * ItinerarySelectionsSchema): fares are predicted per request by the ML
+ * service and never stored in the itinerary document, so only what the
+ * traveler actually ticked was ever persisted.
+ */
+function addFareSection(doc: PDFDoc, title: string, subtitle: string, cards: FareCard[]): void {
+    if (cards.length === 0) return;
+
+    doc.addPage();
+    drawPageHeader(doc);
+    doc.y = 62;
+
+    addTitle(doc, title, subtitle);
+
+    cards.slice(0, 10).forEach((card) => {
+        ensureSpace(doc, 82);
+
+        const y = doc.y;
+        roundedCard(doc, PAGE.left, y, PAGE.width, 66, COLORS.white);
+
+        doc.fillColor(COLORS.blue)
+            .font("Helvetica-Bold")
+            .fontSize(8)
+            .text(card.label.toUpperCase(), PAGE.left + 14, y + 12, { width: PAGE.width - 160 });
+
+        if (card.fare !== undefined) {
+            doc.fillColor(COLORS.navy)
+                .font("Helvetica-Bold")
+                .fontSize(11)
+                .text(formatCurrency(card.fare), PAGE.left + PAGE.width - 145, y + 12, {
+                    width: 130,
+                    align: "right",
+                });
+        }
+
+        doc.fillColor(COLORS.navy)
+            .font("Helvetica-Bold")
+            .fontSize(10)
+            .text(card.route, PAGE.left + 14, y + 28, { width: PAGE.width - 160 });
+
+        doc.fillColor(COLORS.muted)
+            .font("Helvetica")
+            .fontSize(8)
+            .text(card.meta.filter(Boolean).join("  |  "), PAGE.left + 14, y + 46, {
+                width: PAGE.width - 28,
+            });
+
+        doc.y = y + 78;
+    });
+
+    doc.fillColor(COLORS.muted)
+        .font("Helvetica-Oblique")
+        .fontSize(7.5)
+        .text(
+            "Fares are model estimates for these dates, not quotes, and will differ at booking.",
+            PAGE.left,
+            doc.y + 4,
+            { width: PAGE.width },
+        );
+}
+
 /**
  * PDFKit's built-in Helvetica does not reliably render the INR glyph.
  * Use "INR" in generated PDFs instead of producing tofu/square characters.
@@ -651,6 +734,7 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
             // items each section later slices for layout.
             const isSelected = buildSelectionFilter(itinerary);
             const flights = selectedFlights(itinerary);
+            const trains = selectedTrains(itinerary);
 
             const accommodations = (Array.isArray(itinerary.accommodations) ? itinerary.accommodations : [])
                 .filter((_acc, index) => isSelected(`hotel:${index}`));
@@ -815,83 +899,38 @@ export async function generateItineraryPdf(itinerary: ItineraryOutput): Promise<
                 addDay(doc, day, isSelected);
             });
 
-            // Chosen flights. Unlike every other section these are inclusions
-            // (see ItinerarySelectionsSchema): flight fares are predicted
-            // client-side by the ML service and are not part of the generated
-            // itinerary document, so only the ones the traveler actually ticked
-            // were ever stored.
-            if (flights.length > 0) {
-                doc.addPage();
-                drawPageHeader(doc);
-                doc.y = 62;
+            addFareSection(
+                doc,
+                "Your Flights",
+                "Selected from predicted fares",
+                flights.map((flight) => ({
+                    label: String(flight.airline || "Flight"),
+                    fare: flight.predictedFare,
+                    route: `${flight.origin || ""}  ->  ${flight.destination || ""}`,
+                    meta: [
+                        flight.flightNumber ? `Flight ${flight.flightNumber}` : "",
+                        flight.date ? formatDate(String(flight.date)) : "",
+                        flight.dayOfWeek || "",
+                    ],
+                })),
+            );
 
-                addTitle(doc, "Your Flights", "Selected from predicted fares");
-
-                flights.slice(0, 10).forEach((flight) => {
-                    ensureSpace(doc, 82);
-
-                    const y = doc.y;
-                    roundedCard(doc, PAGE.left, y, PAGE.width, 66, COLORS.white);
-
-                    doc.fillColor(COLORS.blue)
-                        .font("Helvetica-Bold")
-                        .fontSize(8)
-                        .text(
-                            String(flight.airline || "Flight").toUpperCase(),
-                            PAGE.left + 14,
-                            y + 12,
-                            { width: PAGE.width - 160 },
-                        );
-
-                    if (flight.predictedFare !== undefined) {
-                        doc.fillColor(COLORS.navy)
-                            .font("Helvetica-Bold")
-                            .fontSize(11)
-                            .text(
-                                formatCurrency(flight.predictedFare),
-                                PAGE.left + PAGE.width - 145,
-                                y + 12,
-                                { width: 130, align: "right" },
-                            );
-                    }
-
-                    doc.fillColor(COLORS.navy)
-                        .font("Helvetica-Bold")
-                        .fontSize(10)
-                        .text(
-                            `${flight.origin || ""}  ->  ${flight.destination || ""}`,
-                            PAGE.left + 14,
-                            y + 28,
-                            { width: PAGE.width - 160 },
-                        );
-
-                    doc.fillColor(COLORS.muted)
-                        .font("Helvetica")
-                        .fontSize(8)
-                        .text(
-                            [
-                                flight.flightNumber ? `Flight ${flight.flightNumber}` : "",
-                                flight.date ? formatDate(String(flight.date)) : "",
-                                flight.dayOfWeek || "",
-                            ].filter(Boolean).join("  |  "),
-                            PAGE.left + 14,
-                            y + 46,
-                            { width: PAGE.width - 28 },
-                        );
-
-                    doc.y = y + 78;
-                });
-
-                doc.fillColor(COLORS.muted)
-                    .font("Helvetica-Oblique")
-                    .fontSize(7.5)
-                    .text(
-                        "Fares are model estimates for these dates, not quotes, and will differ at booking.",
-                        PAGE.left,
-                        doc.y + 4,
-                        { width: PAGE.width },
-                    );
-            }
+            // Trains carry no service name or number: the rail model predicts a
+            // fare for a route and a date, nothing more (see ADR 0007).
+            addFareSection(
+                doc,
+                "Your Trains",
+                "Selected from predicted rail fares",
+                trains.map((train) => ({
+                    label: String(train.origin || "Train"),
+                    fare: train.predictedFare,
+                    route: `${train.origin || ""}  ->  ${train.destination || ""}`,
+                    meta: [
+                        train.date ? formatDate(String(train.date)) : "",
+                        train.dayOfWeek || "",
+                    ],
+                })),
+            );
 
             // Transport
             if (transport.length > 0) {

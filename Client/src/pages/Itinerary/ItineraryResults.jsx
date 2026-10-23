@@ -15,6 +15,7 @@ import {
   Moon,
   Car,
   Plane,
+  TrainFront,
   Bed,
   Activity,
   Mail,
@@ -22,7 +23,11 @@ import {
   ExternalLink
 } from "lucide-react";
 import ItineraryMap from "./ItineraryMap";
-import { fetchFlightFarePrediction, saveItinerarySelections } from "../../lib/authApi";
+import {
+  fetchFlightFarePrediction,
+  fetchRailFarePrediction,
+  saveItinerarySelections,
+} from "../../lib/authApi";
 import { safeHttpUrl } from "../../lib/safeUrl";
 import { getBookingPlatforms } from "./bookingLinks";
 import PlaceTicketCard from "../../components/itinerary/PlaceTicketCard";
@@ -440,6 +445,226 @@ function FlightPredictions({ itinerary, source, isFlightSelected, onToggleFlight
 }
 
 
+/* ── Rail ────────────────────────────────────────────────────────────────────
+ * The rail model (lightgbm_rail_model_3_inputs.pkl) predicts a fare from three
+ * inputs only: origin station, destination station, journey date. It knows
+ * nothing about individual trains, so a card is a DATE, not a service — there
+ * is no train name, number, class or timing to show, and inventing one would
+ * present a guess as a quote.
+ *
+ * Images are intentionally unset: drop a file path into RAIL_IMAGES and it
+ * renders; until then every card shows a labelled placeholder carrying the same
+ * alt text a real image would.
+ */
+const RAIL_IMAGES = {
+  // Frequent Indian Railways liveries, reusable across every train sharing one.
+  vandeBharat: "",
+  rajdhani: "",
+  shatabdi: "",
+  duronto: "",
+  garibRath: "",
+  humsafar: "",
+  expressBlue: "",
+  passengerMemu: "",
+  toyTrain: "",
+  generic: "",
+};
+
+// Fixed key for now: the model gives no train identity to key an image on.
+// ponytail: constant key, swap for a service-name -> livery lookup if train
+// listings are ever added.
+function railImageKey() {
+  return "generic";
+}
+
+function RailCard({ quote, index, selectable, chosen, onToggle }) {
+  const imageSrc = RAIL_IMAGES[railImageKey()];
+  const alt = `Indian Railways train from ${quote.origin} to ${quote.destination}`;
+  const isBest = index === 0;
+
+  return (
+    <div
+      className={`relative rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 ${
+        chosen
+          ? "ring-2 ring-[#2563EB] ring-offset-2"
+          : isBest
+          ? "ring-2 ring-emerald-400 ring-offset-2"
+          : "border border-slate-200"
+      }`}
+    >
+      {isBest && (
+        <div className="absolute top-3 left-3 z-20">
+          <span className="bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md tracking-wide">
+            ✦ CHEAPEST DAY
+          </span>
+        </div>
+      )}
+
+      {selectable && (
+        <label className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 shadow-md cursor-pointer">
+          <SelectBox
+            checked={Boolean(chosen)}
+            onChange={() => onToggle?.(quote)}
+            label={`Include the ${quote.date} train from ${quote.origin} to ${quote.destination} in my PDF`}
+          />
+          <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+            {chosen ? "Added" : "Add"}
+          </span>
+        </label>
+      )}
+
+      {/* Image slot — empty by design; the alt text carries the meaning. */}
+      <div className="relative h-40 overflow-hidden bg-slate-100">
+        {imageSrc ? (
+          <img src={imageSrc} alt={alt} className="w-full h-full object-cover object-center" />
+        ) : (
+          <div
+            role="img"
+            aria-label={alt}
+            className="w-full h-full flex items-center justify-center text-slate-300"
+          >
+            <TrainFront size={44} aria-hidden="true" />
+          </div>
+        )}
+      </div>
+
+      <div className="px-4 pt-3 pb-4">
+        <div className="flex items-center gap-1.5 text-sm font-bold text-slate-800 mb-1">
+          <span className="truncate">{quote.origin}</span>
+          <span className="text-[#2563EB] text-base">→</span>
+          <span className="truncate">{quote.destination}</span>
+        </div>
+
+        <p className="text-[11px] text-slate-500 font-medium">
+          {quote.date}{quote.dayOfWeek ? ` · ${quote.dayOfWeek}` : ""}
+        </p>
+
+        <div className="my-3 border-t border-dashed border-slate-200" />
+
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mb-0.5">
+              Predicted Fare
+            </p>
+            <p className="text-2xl font-extrabold text-[#0f2442]">
+              ₹{Math.round(quote.predictedFare).toLocaleString("en-IN")}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-slate-400 italic">AI estimate</p>
+            <p className="text-[10px] text-slate-400">fares may vary</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RailPredictions({ itinerary, source, isTrainSelected, onToggleTrain, selectable }) {
+  const [state, setState] = useState({ status: "loading", quotes: [], error: "" });
+
+  const origin = source || "Delhi";
+  const destination = itinerary?.destination || "";
+  const startDate = itinerary?.startDate
+    ? String(itinerary.startDate).substring(0, 10)
+    : new Date().toISOString().substring(0, 10);
+
+  useEffect(() => {
+    if (!destination) return undefined;
+    let cancelled = false;
+    setState({ status: "loading", quotes: [], error: "" });
+
+    fetchRailFarePrediction({ origin, destination, startDate, windowDays: 7 })
+      .then((data) => {
+        if (cancelled) return;
+        const prediction = data?.prediction;
+        const quotes = (prediction?.quotes || []).map((quote) => ({
+          origin: prediction.origin,
+          destination: prediction.destination,
+          date: quote.date,
+          dayOfWeek: quote.dayOfWeek,
+          predictedFare: Number(quote.predictedFare),
+        }));
+        // Cheapest three days of the window. No invented fallback, unlike
+        // flights: a made-up rail fare has no train to hang it on and would
+        // read as a real quote.
+        quotes.sort((a, b) => a.predictedFare - b.predictedFare || a.date.localeCompare(b.date));
+        setState({ status: "ready", quotes: quotes.slice(0, 3), error: "" });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setState({
+          status: "error",
+          quotes: [],
+          error: error?.message || "Train fares are unavailable for this route.",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [origin, destination, startDate]);
+
+  if (!destination) return null;
+
+  return (
+    <div className="mb-8 mt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 pb-2 border-b border-slate-100">
+        <div>
+          <div className="flex items-center gap-2">
+            <TrainFront className="w-5 h-5 text-[#2563EB]" />
+            <h2 className="text-xl font-bold text-slate-800">
+              Train Fare Predictions: {origin} → {destination}
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            {selectable
+              ? "Tick the day you want to travel and it will be included in your PDF"
+              : "Cheapest 3 travel dates in the week from your start date"}
+          </p>
+        </div>
+      </div>
+
+      {state.status === "loading" && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 flex items-center gap-3 text-slate-600">
+          <Loader2 className="w-5 h-5 animate-spin text-[#2563EB]" />
+          <span className="text-sm font-medium">
+            Fetching train fare predictions for {origin} → {destination}...
+          </span>
+        </div>
+      )}
+
+      {state.status === "error" && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+          {state.error}
+        </div>
+      )}
+
+      {state.status === "ready" && state.quotes.length === 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+          No train fares were predicted for this route.
+        </div>
+      )}
+
+      {state.status === "ready" && state.quotes.length > 0 && (
+        <div className="grid gap-5 md:grid-cols-3">
+          {state.quotes.map((quote, index) => (
+            <RailCard
+              key={`${quote.date}-${quote.predictedFare}`}
+              quote={quote}
+              index={index}
+              selectable={selectable}
+              chosen={selectable && isTrainSelected?.(quote)}
+              onToggle={onToggleTrain}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 /* ── Item selection ──────────────────────────────────────────────────────────
  * Every item in a generated itinerary can be ticked or unticked, and only the
  * ticked ones reach the downloaded PDF.
@@ -462,12 +687,18 @@ function flightKey(flight) {
   return [flight?.airline, flight?.flightNumber, flight?.date].join("|");
 }
 
+// The rail model identifies no train, so a chosen train IS its route and date.
+function trainKey(train) {
+  return [train?.origin, train?.destination, train?.date].join("|");
+}
+
 function useItinerarySelections(itinerary, readOnly) {
   const itineraryId = itinerary?.id;
 
   const fromItinerary = () => ({
     excluded: new Set(itinerary?.selections?.excluded || []),
     flights: itinerary?.selections?.flights || [],
+    trains: itinerary?.selections?.trains || [],
   });
 
   const [selections, setSelections] = useState(fromItinerary);
@@ -502,6 +733,7 @@ function useItinerarySelections(itinerary, readOnly) {
           saveItinerarySelections(itineraryId, {
             excluded: [...next.excluded],
             flights: next.flights,
+            trains: next.trains,
           }),
         )
         .then(() => setSaveState("saved"))
@@ -548,6 +780,20 @@ function useItinerarySelections(itinerary, readOnly) {
     [commit, selections],
   );
 
+  const toggleTrain = useCallback(
+    (train) => {
+      const key = trainKey(train);
+      const chosen = selections.trains.some((t) => trainKey(t) === key);
+      commit({
+        ...selections,
+        trains: chosen
+          ? selections.trains.filter((t) => trainKey(t) !== key)
+          : [...selections.trains, train],
+      });
+    },
+    [commit, selections],
+  );
+
   const isSelected = useCallback((key) => !selections.excluded.has(key), [selections]);
 
   const isFlightSelected = useCallback(
@@ -555,7 +801,21 @@ function useItinerarySelections(itinerary, readOnly) {
     [selections],
   );
 
-  return { isSelected, isFlightSelected, toggle, toggleFlight, saveState, selections };
+  const isTrainSelected = useCallback(
+    (train) => selections.trains.some((t) => trainKey(t) === trainKey(train)),
+    [selections],
+  );
+
+  return {
+    isSelected,
+    isFlightSelected,
+    isTrainSelected,
+    toggle,
+    toggleFlight,
+    toggleTrain,
+    saveState,
+    selections,
+  };
 }
 
 /**
@@ -643,8 +903,16 @@ export default function ItineraryResults({
 
   // Called unconditionally, above the early returns below: hooks cannot sit
   // behind a conditional return.
-  const { isSelected, isFlightSelected, toggle, toggleFlight, saveState, selections } =
-    useItinerarySelections(itinerary, readOnly);
+  const {
+    isSelected,
+    isFlightSelected,
+    isTrainSelected,
+    toggle,
+    toggleFlight,
+    toggleTrain,
+    saveState,
+    selections,
+  } = useItinerarySelections(itinerary, readOnly);
 
   // A shared itinerary is somebody else's document, so it is shown whole and
   // read-only rather than offering ticks that could never be saved.
@@ -672,6 +940,7 @@ export default function ItineraryResults({
         0,
       ),
       flights: selections.flights.length,
+      trains: selections.trains.length,
     }),
     [selections, accommodations, placesToVisit, days],
   );
@@ -772,6 +1041,14 @@ export default function ItineraryResults({
             selectable={selectable}
             isFlightSelected={isFlightSelected}
             onToggleFlight={toggleFlight}
+          />
+
+          <RailPredictions
+            itinerary={itinerary}
+            source={sourceCity}
+            selectable={selectable}
+            isTrainSelected={isTrainSelected}
+            onToggleTrain={toggleTrain}
           />
 
           <PriceHistoryGraph itinerary={itinerary} sourceCity={sourceCity} />
