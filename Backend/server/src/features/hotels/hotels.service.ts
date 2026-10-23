@@ -210,6 +210,36 @@ export function serpStatus(): Record<string, unknown> {
         : { label: "serpapi", total: 0, ready: 0, gates: [] };
 }
 
+/**
+ * Classifies SerpApi's 200-with-`error` body.
+ *
+ * SerpApi echoes request parameters into some of these strings, and `q` is
+ * attacker-controlled free text (2-150 chars, any authenticated user). If a
+ * body string could fault a key, someone could search for "run out of
+ * searches" and park every key in the waterfall, taking hotel search down for
+ * everyone. Two rules keep that shut:
+ *
+ * 1. A body string can never mark a key `invalid`. That is the 30-minute park,
+ *    the most damaging state, and HTTP 401/403 already covers a rejected key
+ *    structurally — no free text needed.
+ * 2. The `exhausted` match is skipped when the message quotes our own query
+ *    back at us, because then the text is the user's, not SerpApi's.
+ *
+ * Anything else is `fatal`: our request is wrong, and no other key fixes it.
+ */
+export function classifySerpBody(message: string, destination: string): SerpFailure {
+    const echoesQuery =
+        destination.length >= 2 && message.toLowerCase().includes(destination.toLowerCase());
+
+    if (!echoesQuery && /(run out of|exceeded your) searches/i.test(message)) {
+        return new SerpFailure("exhausted", "plan out of searches");
+    }
+
+    // Truncated: this reaches logs and the error middleware, and the text may
+    // be the caller's own input reflected back.
+    return new SerpFailure("fatal", `serpapi: ${message.slice(0, 200)}`);
+}
+
 /** One SerpApi search with one key. Failures are classified, never swallowed. */
 async function fetchOnce(query: HotelQuery, apiKey: string): Promise<Hotel[]> {
     const url = new URL(SERP_API_URL);
@@ -258,14 +288,7 @@ async function fetchOnce(query: HotelQuery, apiKey: string): Promise<Hotel[]> {
     // SerpApi answers 200 with an `error` string for an exhausted plan or an
     // unsupported query, so a non-ok status is not the only failure mode.
     if (body?.error) {
-        const message = String(body.error);
-        // "You've run out of searches" / "has run out of searches" — plan
-        // exhausted, which is exactly what another key fixes.
-        const outOfSearches = /run out of searches|exhausted|plan limit/i.test(message);
-        const badKey = /invalid api key|unauthorized|missing api key/i.test(message);
-        if (outOfSearches) throw new SerpFailure("exhausted", "plan out of searches");
-        if (badKey) throw new SerpFailure("invalid", "key rejected by SerpApi");
-        throw new SerpFailure("fatal", `serpapi: ${message}`);
+        throw classifySerpBody(String(body.error), query.destination);
     }
 
     const nights = nightsBetween(query.checkIn, query.checkOut);

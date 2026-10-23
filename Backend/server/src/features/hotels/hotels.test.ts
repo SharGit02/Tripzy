@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeProperty, classifySerpFailure, SerpFailure } from "./hotels.service.js";
+import {
+    normalizeProperty,
+    classifySerpFailure,
+    classifySerpBody,
+    SerpFailure,
+} from "./hotels.service.js";
 import { buildSelectionFilter } from "../../services/pdf/pdf.service.js";
 import { ItineraryAccommodationSchema } from "../itinerary/itinerary.schema.js";
 
@@ -164,5 +169,41 @@ describe("classifySerpFailure", () => {
     it("blames the upstream, not the key, for anything unclassified", () => {
         expect(classifySerpFailure(new Error("boom")))
             .toEqual({ kind: "transient", reason: "boom" });
+    });
+});
+
+/*
+ * `destination` is attacker-controlled free text that SerpApi may echo back in
+ * its error string. If that text could fault a key, one user could park every
+ * key in the waterfall and take hotel search down for everyone.
+ */
+describe("classifySerpBody", () => {
+    it("faults the key when SerpApi says the plan is out of searches", () => {
+        expect(classifySerpBody("Your account has run out of searches.", "Goa").kind)
+            .toBe("exhausted");
+    });
+
+    it("ignores an exhaustion phrase that is just the caller's query echoed back", () => {
+        expect(
+            classifySerpBody(
+                "Google Hotels hasn't returned any results for 'run out of searches'.",
+                "run out of searches",
+            ).kind,
+        ).toBe("fatal");
+    });
+
+    it("never marks a key invalid from body text alone", () => {
+        for (const message of ["invalid api key", "unauthorized", "missing api key"]) {
+            expect(classifySerpBody(message, "Goa").kind).not.toBe("invalid");
+        }
+    });
+
+    it("treats an unsupported query as fatal so it does not burn keys", () => {
+        expect(classifySerpBody("Unsupported check_in_date.", "Goa").kind).toBe("fatal");
+    });
+
+    it("truncates the reflected message it puts in logs", () => {
+        const failure = classifySerpBody("x".repeat(5_000), "Goa");
+        expect(failure.reason.length).toBeLessThan(250);
     });
 });
