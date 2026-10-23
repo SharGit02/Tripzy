@@ -4,8 +4,10 @@ import {
     normalizeProperty,
     classifySerpFailure,
     classifySerpBody,
+    withBodyExhaustionCap,
     SerpFailure,
 } from "./hotels.service.js";
+import { KeyWaterfall } from "../../services/ai/keyWaterfall.js";
 import { buildSelectionFilter } from "../../services/pdf/pdf.service.js";
 import { ItineraryAccommodationSchema } from "../itinerary/itinerary.schema.js";
 
@@ -205,5 +207,56 @@ describe("classifySerpBody", () => {
     it("truncates the reflected message it puts in logs", () => {
         const failure = classifySerpBody("x".repeat(5_000), "Goa");
         expect(failure.reason.length).toBeLessThan(250);
+    });
+});
+
+/*
+ * Driven through a real KeyWaterfall, not a mock: the thing under test is how
+ * many gates end up cooling, which only the waterfall knows.
+ */
+describe("withBodyExhaustionCap", () => {
+    const waterfall = () =>
+        new KeyWaterfall({
+            label: "test",
+            keys: ["key-aaaa", "key-bbbb", "key-cccc"],
+            classify: classifySerpFailure,
+            onAttempt: () => {},
+        });
+
+    it("parks at most one key when every response claims exhaustion in the body", async () => {
+        const dam = waterfall();
+        const op = withBodyExhaustionCap(async () => {
+            throw new SerpFailure("exhausted", "plan out of searches", undefined, true);
+        });
+
+        await expect(dam.run(op)).rejects.toThrow(/plan out of searches/);
+
+        const overflowing = dam.status().gates.filter((g) => g.state === "overflowing");
+        expect(overflowing).toHaveLength(1);
+    });
+
+    it("still fails over to the next key on a genuine single-key exhaustion", async () => {
+        const dam = waterfall();
+        let calls = 0;
+        const op = withBodyExhaustionCap(async () => {
+            calls += 1;
+            if (calls === 1) {
+                throw new SerpFailure("exhausted", "plan out of searches", undefined, true);
+            }
+            return "hotels";
+        });
+
+        await expect(dam.run(op)).resolves.toBe("hotels");
+        expect(calls).toBe(2);
+    });
+
+    it("does not cap a 429, which is a status code rather than body text", async () => {
+        const dam = waterfall();
+        const op = withBodyExhaustionCap(async () => {
+            throw new SerpFailure("exhausted", "rate limit reached");
+        });
+
+        await expect(dam.run(op)).rejects.toThrow(/All 3 test API keys failed/);
+        expect(dam.status().gates.filter((g) => g.state === "overflowing")).toHaveLength(3);
     });
 });

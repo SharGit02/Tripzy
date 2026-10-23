@@ -168,6 +168,12 @@ export class SerpFailure extends Error {
         readonly kind: FailureKind,
         readonly reason: string,
         readonly cooldownMs?: number,
+        /**
+         * True when the kind came from SerpApi's response *body* rather than a
+         * status code. Body text can be influenced by the caller, so these are
+         * capped per request — see fetchFromSerpApi.
+         */
+        readonly fromBody = false,
     ) {
         super(reason);
         this.name = "SerpFailure";
@@ -232,7 +238,7 @@ export function classifySerpBody(message: string, destination: string): SerpFail
         destination.length >= 2 && message.toLowerCase().includes(destination.toLowerCase());
 
     if (!echoesQuery && /(run out of|exceeded your) searches/i.test(message)) {
-        return new SerpFailure("exhausted", "plan out of searches");
+        return new SerpFailure("exhausted", "plan out of searches", undefined, true);
     }
 
     // Truncated: this reaches logs and the error middleware, and the text may
@@ -299,6 +305,40 @@ async function fetchOnce(query: HotelQuery, apiKey: string): Promise<Hotel[]> {
 }
 
 /**
+ * Wraps a waterfall operation so at most ONE key per request can be parked on
+ * the strength of SerpApi's response body.
+ *
+ * classifySerpBody's echo guard is best-effort: it assumes SerpApi reflects the
+ * destination verbatim, and a truncated or normalized echo would slip the
+ * trigger phrase through while the guard sees no match. This cap is the
+ * structural backstop — a genuine plan exhaustion still fails over, because the
+ * first one parks its key and spills to the next, but a crafted destination
+ * cannot walk the waterfall parking every key behind it.
+ *
+ * A 429 is a status code, not body text, so it is never capped.
+ */
+export function withBodyExhaustionCap<T>(
+    operation: (key: string) => Promise<T>,
+): (key: string) => Promise<T> {
+    let bodyExhaustions = 0;
+
+    return async (key: string) => {
+        try {
+            return await operation(key);
+        } catch (error) {
+            if (error instanceof SerpFailure && error.fromBody && error.kind === "exhausted") {
+                bodyExhaustions += 1;
+                // fatal stops the waterfall rather than cooling every key left.
+                if (bodyExhaustions > 1) {
+                    throw new SerpFailure("fatal", `${error.reason} (cap reached)`);
+                }
+            }
+            throw error;
+        }
+    };
+}
+
+/**
  * SerpApi search across every configured key, highest priority first. Mirrors
  * the Gemini key waterfall: a key that is out of searches or rejected spills
  * down to the next one and is skipped for a cooldown, so an exhausted key does
@@ -309,7 +349,7 @@ async function fetchFromSerpApi(query: HotelQuery): Promise<Hotel[]> {
         throw httpError(503, "Hotel search is not configured.");
     }
 
-    return getSerpWaterfall().run((apiKey) => fetchOnce(query, apiKey));
+    return getSerpWaterfall().run(withBodyExhaustionCap((apiKey) => fetchOnce(query, apiKey)));
 }
 
 /**
