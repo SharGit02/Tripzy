@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from "node:dns";
+import { isIP } from "node:net";
 import ipaddr from "ipaddr.js";
 import { Agent, fetch as undiciFetch } from "undici";
 import type {
@@ -106,32 +107,59 @@ function safeLookup(
 // this process uses.
 const safeImageAgent = new Agent({ connect: { lookup: safeLookup } });
 
-function isHttpsUrl(url: string): boolean {
+/**
+ * https-only, and — for a URL whose host is already an IP literal — blocked
+ * right here if that address is reserved. `safeLookup` above only runs when
+ * Node's connector actually has a hostname to resolve; confirmed (by tracing
+ * a custom lookup against an IP-literal URL) that an IP-literal host skips
+ * DNS resolution entirely and is dialed directly, so it never reaches
+ * `safeLookup` at all — this check is the only thing guarding that case.
+ * IPv6 literals keep their brackets in `URL.hostname` (`"[::1]"`), which
+ * `net.isIP` doesn't recognise, so they're stripped before classifying.
+ */
+function isFetchableImageUrl(url: string): boolean {
+    let parsed: URL;
     try {
-        return new URL(url).protocol === "https:";
+        parsed = new URL(url);
     } catch {
         return false;
     }
+    if (parsed.protocol !== "https:") return false;
+
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+    if (isIP(hostname) !== 0 && isReservedIp(hostname)) return false;
+
+    return true;
 }
+
+/*
+ * Exported for pdf.image-ssrf.test.ts only. An IP-literal URL bypassing
+ * safeLookup entirely (Node's connector dials it directly without ever
+ * calling a custom `lookup` — confirmed by tracing one) was a real, shipped
+ * regression once already; this is the one part of the SSRF guard worth a
+ * test that needs no network call to run.
+ */
+export const __ssrfInternals = { isReservedIp, isFetchableImageUrl };
 
 /**
  * Fetches a single hotel/place photo for embedding via `doc.image()`, which
  * needs raw bytes, not a URL. These URLs can come from AI-generated
  * itinerary data, not only vetted SerpApi results, so the server cannot
- * trust them to point anywhere safe: `safeImageAgent`'s pinned lookup blocks
- * SSRF (including DNS rebinding) at the actual connection, `redirect:
- * "manual"` (a 3xx response just fails `.ok`) stops a redirect from
- * reaching an unsafe target after the fact, and the body is read as a
- * stream with a running byte count — aborted the moment it crosses the cap,
- * rather than buffered in full and only checked afterward, so an attacker
- * can't force a large download just by lying about Content-Length. Every
- * failure mode (missing/non-https/unsafe URL, 404, timeout, a redirect, a
- * non-image response, an oversized one) resolves to `null` rather than
- * throwing, so a broken photo never takes down the whole PDF — callers just
- * render the card without a thumbnail.
+ * trust them to point anywhere safe: `isFetchableImageUrl` rejects an
+ * IP-literal URL pointing at a reserved address outright, `safeImageAgent`'s
+ * pinned lookup closes the same gap (plus DNS rebinding) for a hostname URL
+ * at the actual connection, `redirect: "manual"` (a 3xx response just fails
+ * `.ok`) stops a redirect from reaching an unsafe target after the fact,
+ * and the body is read as a stream with a running byte count — aborted the
+ * moment it crosses the cap, rather than buffered in full and only checked
+ * afterward, so an attacker can't force a large download just by lying
+ * about Content-Length. Every failure mode (missing/non-https/unsafe URL,
+ * 404, timeout, a redirect, a non-image response, an oversized one)
+ * resolves to `null` rather than throwing, so a broken photo never takes
+ * down the whole PDF — callers just render the card without a thumbnail.
  */
 async function fetchImageBuffer(url: string | undefined): Promise<Buffer | null> {
-    if (!url || !isHttpsUrl(url)) return null;
+    if (!url || !isFetchableImageUrl(url)) return null;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
